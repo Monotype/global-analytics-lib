@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Analytics App</title>
+    <style>
+      div {
+        margin-bottom: 50px;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+      a {
+        text-decoration: none;
+        font-size: 16px;
+      }
+      button {
+        font-size: 16px;
+        border: 0;
+        background-color: rgb(0, 81, 255);
+        color: white;
+        border-radius: 4px;
+        padding: 15px 30px;
+        cursor: pointer;
+      }
+    </style>
+    <!-- <script src="https://hello.monotype.com/js/forms2/js/forms2.min.js"></script> -->
+    <!-- <script src="https://player.vimeo.com/api/player.js"></script> -->
+    <script>
+      let pageInfoGlobal = {}
+    </script>
+  </head>
+  <body>
+    <div><a href="https://www.google.com" target="_blank" data-analytics-linkcategory="home page banners" data-analytics-linksection="Monotype" data-analytics-linkname="Check them out" data-analytics-linktype="a">Check them out</a></div>
+    <div><button data-analytics-linkcategory="home page banners" data-analytics-linksection="Monotype" data-analytics-linkname="Click me" data-analytics-linktype="button">Click me</button></div>
+    <iframe width="854" height="480" frameborder="0" allowfullscreen="allowfullscreen" src="https://player.vimeo.com/video/780389635?autoplay=0"></iframe>
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
