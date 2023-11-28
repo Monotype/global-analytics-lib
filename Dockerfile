@@ -16,4 +16,6 @@ RUN npm install
 COPY . .
 
 # Build the Vite project
-RUN npm run build
+# start app
+
+CMD ["npm", "run", "build"]
