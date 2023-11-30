@@ -9,7 +9,7 @@ try {
 
     node("linux-mosaic") {
         stage('Clean Workspace') {
-           sh '''
+            sh '''
                     sudo rm -rf ${WORKSPACE}/* 
                 '''
         }
@@ -62,7 +62,7 @@ try {
                         export AWS_DEFAULT_REGION=us-east-1
                         pwd
                         ls ./dist/
-                        aws s3 sync ./dist/ s3://pp-static.monotype.com/global-analytics/ --delete
+                        aws s3 sync ./dist/ s3://static.monotype.com/global-analytics/ --delete
                     """
                 } catch (error) {
                     currentBuild.result = 'FAILURE'
