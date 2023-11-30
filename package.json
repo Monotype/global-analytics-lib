@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && esbuild dist/global-analytics-lib.js --bundle --minify --outfile=dist/global-analytics-lib.min.js",
+    "build": "VITE_APP_VERSION=$(node -p \"require('./package.json').version\") vite build && esbuild dist/$(node -p \"require('./package.json').version\")/global-analytics-lib.js --bundle --minify --outfile=dist/$(node -p \"require('./package.json').version\")/global-analytics-lib.min.js",
     "preview": "vite preview"
   },
   "devDependencies": {
