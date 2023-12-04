@@ -1,6 +1,11 @@
+// Vimeo player API to track vimeo player events
+import "https://player.vimeo.com/api/player.js";
+
 // Description: This file is used to push data to adobeDataLayer object
 // adobeDataLayer declaration
 window.adobeDataLayer = window.adobeDataLayer || [];
+
+const crypto = window.crypto || window.msCrypto;
 // Get pageInfo object from global variable
 const pageInfoObj = typeof pageInfoGlobal != 'undefined' ? JSON.parse(JSON.stringify(pageInfoGlobal)) : {};
 
@@ -116,7 +121,7 @@ function getUserInfo() {
 document.addEventListener('DOMContentLoaded', (e) => {
     delete pageInfoObj.hasCustomPageLoad;
     if (!hasCustomPageLoad) {
-        getDataLayerInfo('pageLoad', pageInfoObj.pageInfo.eventInfo ?? 'regularPageLoad');
+        getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad');
     }
     getAnalyticsOnLinkClicks();
     document.addEventListener('click', function (event) {
@@ -165,9 +170,7 @@ if (typeof MktoForms2 === 'undefined') {
                 getFormSubmitAnalytics(form, formName, formFields, checkboxObj);
             });
             form.onSuccess(function () {
-                if (!isEventPushed('formSuccess')) {
-                    getFormSuccessAnalytics(form, formName, formFields);
-                }
+                getFormSuccessAnalytics(form, formName, formFields);
             });
         }, 2000);
     });
@@ -231,7 +234,9 @@ function getCookieConsentGroupStatus() {
 
 // Generate a random anonymous ID
 function generateAnonymousID() {
-    return [...Array(16)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+    const array = new Uint8Array(8);
+    crypto.getRandomValues(array);
+    return Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 // To get or set the anonymousID in a cookie
@@ -473,6 +478,10 @@ let milestoneReached = {
     75: false
 };
 
+let videoLengthPercentage = 0;
+
+let videoStarted = false;
+
 Array.from(iframes).map(iframe => {
     if (iframe && iframe.src && iframe.src.includes("vimeo")) {
         const player = new Vimeo.Player(iframe);
@@ -488,24 +497,30 @@ Array.from(iframes).map(iframe => {
         });
 
         player.on('play', function () {
-            window.adobeDataLayer.push({
-                "event": "videoStart",
-                "video": {
-                    "videoName": videoName,
-                    "videoLength": `${videoDuration}`
-                }
-            });
+            if (!videoStarted) {
+                window.adobeDataLayer.push({
+                    "event": "videoStart",
+                    "video": {
+                        "videoName": videoName,
+                        "videoLength": `${videoDuration}`
+                    }
+                });
+                videoStarted = true;
+            }
         });
 
         player.on('pause', function () {
-            window.adobeDataLayer.push({
-                "event": "videoPause",
-                "video": {
-                    "videoName": videoName,
-                    "videoLength": `${videoDuration}`,
-                    "videoPercent": videoProgressPercent
-                }
-            });
+            videoStarted = false;
+            if (videoLengthPercentage < 100) {
+                window.adobeDataLayer.push({
+                    "event": "videoPause",
+                    "video": {
+                        "videoName": videoName,
+                        "videoLength": `${videoDuration}`,
+                        "videoPercent": videoProgressPercent
+                    }
+                });
+            }
         });
 
         player.on('ended', function () {
@@ -537,6 +552,7 @@ Array.from(iframes).map(iframe => {
                 milestoneReached[progress] = true;
             } else {
                 videoProgressPercent = progress + "%";
+                videoLengthPercentage = progress;
             }
         });
     }
@@ -557,24 +573,30 @@ Array.from(vids).map(vid => {
             let videoName = vid.dataset.analyticsVideoname ? vid.dataset.analyticsVideoname : pageInfoObj.pageInfo?.pageName;
 
             vid.addEventListener('play', function () {
-                window.adobeDataLayer.push({
-                    "event": "videoStart",
-                    "video": {
-                        "videoName": videoName,
-                        "videoLength": `${videoDuration}`
-                    }
-                });
+                if (!videoStarted) {
+                    window.adobeDataLayer.push({
+                        "event": "videoStart",
+                        "video": {
+                            "videoName": videoName,
+                            "videoLength": `${videoDuration}`
+                        }
+                    });
+                    videoStarted = true;
+                }
             });
 
             vid.addEventListener('pause', function () {
-                window.adobeDataLayer.push({
-                    "event": "videoPause",
-                    "video": {
-                        "videoName": videoName,
-                        "videoLength": `${videoDuration}`,
-                        "videoPercent": videoProgressPercent
-                    }
-                });
+                videoStarted = true;
+                if (videoLengthPercentage < 100) {
+                    window.adobeDataLayer.push({
+                        "event": "videoPause",
+                        "video": {
+                            "videoName": videoName,
+                            "videoLength": `${videoDuration}`,
+                            "videoPercent": videoProgressPercent
+                        }
+                    });
+                }
             });
 
             vid.addEventListener('ended', function () {
@@ -605,6 +627,7 @@ Array.from(vids).map(vid => {
                     milestoneReached[progress] = true;
                 } else {
                     videoProgressPercent = progress + "%";
+                    videoLengthPercentage = progress;
                 }
             });
 

@@ -3,7 +3,10 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   build: {
-    minify: 'esbuild',
+    minify: 'terser',
+    terserOptions: {
+      keep_fnames: true,
+    },
     outDir: `dist/${process.env.VITE_APP_VERSION}`,
     lib: {
       // Could also be a dictionary or array of multiple entry points
