@@ -3,6 +3,7 @@
 
 // Description: This file is used to push data to adobeDataLayer object
 // adobeDataLayer declaration
+// Deployment test comment.
 window.adobeDataLayer = window.adobeDataLayer || [];
 
 const crypto = window.crypto || window.msCrypto;
@@ -777,8 +778,8 @@ function getSearchTypeTesterData(typeTesterData) {
 let sampleData = {
     "event": "sampleEvent",
     "eventInfo": "sampleClick"
-  };
+};
 
-  document.querySelector(".sample-not-for-use")?.addEventListener('click', function() {
+document.querySelector(".sample-not-for-use")?.addEventListener('click', function() {
     CustomAnalyitcsEventEmitter.dispatch('customAnalyitcsEvent', sampleData);
-  });
+});
