@@ -1,12 +1,17 @@
+// Vimeo player API to track vimeo player events
+// import Player from '@vimeo/player';
+
 // Description: This file is used to push data to adobeDataLayer object
 // adobeDataLayer declaration
 // Deployment test comment.
 window.adobeDataLayer = window.adobeDataLayer || [];
+
+const crypto = window.crypto || window.msCrypto;
 // Get pageInfo object from global variable
 const pageInfoObj = typeof pageInfoGlobal != 'undefined' ? JSON.parse(JSON.stringify(pageInfoGlobal)) : {};
 
 // Check if the page is search page
-const hasCustomPageLoad = window.location.pathname.includes('search') || window.location.pathname.includes('whatthefont') || pageInfoObj.hasCustomPageLoad;
+const hasCustomPageLoad = window.location.pathname.includes('search') || pageInfoObj.hasCustomPageLoad;
 
 let formabandonField = '';
 
@@ -117,7 +122,7 @@ function getUserInfo() {
 document.addEventListener('DOMContentLoaded', (e) => {
     delete pageInfoObj.hasCustomPageLoad;
     if (!hasCustomPageLoad) {
-        getDataLayerInfo('pageLoad', pageInfoObj.pageInfo.eventInfo ?? 'regularPageLoad');
+        getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad');
     }
     getAnalyticsOnLinkClicks();
     document.addEventListener('click', function (event) {
@@ -166,9 +171,7 @@ if (typeof MktoForms2 === 'undefined') {
                 getFormSubmitAnalytics(form, formName, formFields, checkboxObj);
             });
             form.onSuccess(function () {
-                if (!isEventPushed('formSuccess')) {
-                    getFormSuccessAnalytics(form, formName, formFields);
-                }
+                getFormSuccessAnalytics(form, formName, formFields);
             });
         }, 2000);
     });
@@ -232,7 +235,9 @@ function getCookieConsentGroupStatus() {
 
 // Generate a random anonymous ID
 function generateAnonymousID() {
-    return [...Array(16)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+    const array = new Uint8Array(8);
+    crypto.getRandomValues(array);
+    return Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 // To get or set the anonymousID in a cookie
@@ -474,74 +479,89 @@ let milestoneReached = {
     75: false
 };
 
-Array.from(iframes).map(iframe => {
-    if (iframe && iframe.src && iframe.src.includes("vimeo")) {
-        const player = new Vimeo.Player(iframe);
+let videoLengthPercentage = 0;
 
-        let videoDuration;
+let videoStarted = false;
 
-        let videoProgressPercent = 0;
+if (typeof Vimeo === 'undefined' || typeof Vimeo.Player === 'undefined') {
+    console.log('Load Vimeo Player library to track Vimeo videos - https://player.vimeo.com/api/player.js');
+  } else {
+    Array.from(iframes).map(iframe => {
+        if (iframe && iframe.src && iframe.src.includes("vimeo")) {
+            const player = new Vimeo.Player(iframe);
 
-        let videoName = iframe.parentElement.dataset.analyticsVideoname ? iframe.parentElement.dataset.analyticsVideoname : pageInfoObj.pageInfo?.pageName;
+            let videoDuration;
 
-        player.getDuration().then(function (duration) {
-            videoDuration = duration;
-        });
+            let videoProgressPercent = 0;
 
-        player.on('play', function () {
-            window.adobeDataLayer.push({
-                "event": "videoStart",
-                "video": {
-                    "videoName": videoName,
-                    "videoLength": `${videoDuration}`
+            let videoName = iframe.parentElement.dataset.analyticsVideoname ? iframe.parentElement.dataset.analyticsVideoname : pageInfoObj.pageInfo?.pageName;
+
+            player.getDuration().then(function (duration) {
+                videoDuration = duration;
+            });
+
+            player.on('play', function () {
+                if (!videoStarted) {
+                    window.adobeDataLayer.push({
+                        "event": "videoStart",
+                        "video": {
+                            "videoName": videoName,
+                            "videoLength": `${videoDuration}`
+                        }
+                    });
+                    videoStarted = true;
                 }
             });
-        });
 
-        player.on('pause', function () {
-            window.adobeDataLayer.push({
-                "event": "videoPause",
-                "video": {
-                    "videoName": videoName,
-                    "videoLength": `${videoDuration}`,
-                    "videoPercent": videoProgressPercent
+            player.on('pause', function () {
+                videoStarted = false;
+                if (videoLengthPercentage < 100) {
+                    window.adobeDataLayer.push({
+                        "event": "videoPause",
+                        "video": {
+                            "videoName": videoName,
+                            "videoLength": `${videoDuration}`,
+                            "videoPercent": videoProgressPercent
+                        }
+                    });
                 }
             });
-        });
 
-        player.on('ended', function () {
-            window.adobeDataLayer.push({
-                "event": "videoComplete",
-                "video": {
-                    "videoName": videoName,
-                    "videoLength": `${videoDuration}`,
-                    "videoPercent": videoProgressPercent
-                }
-            });
-        });
-
-        player.on('timeupdate', function (data) {
-            let currentTime = data.seconds;
-            let duration = data.duration;
-
-            let progress = Math.floor((currentTime / duration) * 100);
-
-            if (milestoneReached[progress] === false) {
+            player.on('ended', function () {
                 window.adobeDataLayer.push({
-                    "event": "videoProgress",
+                    "event": "videoComplete",
                     "video": {
                         "videoName": videoName,
                         "videoLength": `${videoDuration}`,
-                        "videoPercent": progress + "%"
+                        "videoPercent": videoProgressPercent
                     }
                 });
-                milestoneReached[progress] = true;
-            } else {
-                videoProgressPercent = progress + "%";
-            }
-        });
-    }
-});
+            });
+
+            player.on('timeupdate', function (data) {
+                let currentTime = data.seconds;
+                let duration = data.duration;
+
+                let progress = Math.floor((currentTime / duration) * 100);
+
+                if (milestoneReached[progress] === false) {
+                    window.adobeDataLayer.push({
+                        "event": "videoProgress",
+                        "video": {
+                            "videoName": videoName,
+                            "videoLength": `${videoDuration}`,
+                            "videoPercent": progress + "%"
+                        }
+                    });
+                    milestoneReached[progress] = true;
+                } else {
+                    videoProgressPercent = progress + "%";
+                    videoLengthPercentage = progress;
+                }
+            });
+        }
+    });
+}
 
 const vids = document.querySelectorAll('video');
 
@@ -558,24 +578,30 @@ Array.from(vids).map(vid => {
             let videoName = vid.dataset.analyticsVideoname ? vid.dataset.analyticsVideoname : pageInfoObj.pageInfo?.pageName;
 
             vid.addEventListener('play', function () {
-                window.adobeDataLayer.push({
-                    "event": "videoStart",
-                    "video": {
-                        "videoName": videoName,
-                        "videoLength": `${videoDuration}`
-                    }
-                });
+                if (!videoStarted) {
+                    window.adobeDataLayer.push({
+                        "event": "videoStart",
+                        "video": {
+                            "videoName": videoName,
+                            "videoLength": `${videoDuration}`
+                        }
+                    });
+                    videoStarted = true;
+                }
             });
 
             vid.addEventListener('pause', function () {
-                window.adobeDataLayer.push({
-                    "event": "videoPause",
-                    "video": {
-                        "videoName": videoName,
-                        "videoLength": `${videoDuration}`,
-                        "videoPercent": videoProgressPercent
-                    }
-                });
+                videoStarted = true;
+                if (videoLengthPercentage < 100) {
+                    window.adobeDataLayer.push({
+                        "event": "videoPause",
+                        "video": {
+                            "videoName": videoName,
+                            "videoLength": `${videoDuration}`,
+                            "videoPercent": videoProgressPercent
+                        }
+                    });
+                }
             });
 
             vid.addEventListener('ended', function () {
@@ -606,6 +632,7 @@ Array.from(vids).map(vid => {
                     milestoneReached[progress] = true;
                 } else {
                     videoProgressPercent = progress + "%";
+                    videoLengthPercentage = progress;
                 }
             });
 
@@ -747,3 +774,12 @@ function getSearchTypeTesterData(typeTesterData) {
         window.adobeDataLayer.push(typeTesterEventData);
     }
 }
+
+let sampleData = {
+    "event": "sampleEvent",
+    "eventInfo": "sampleClick"
+};
+
+document.querySelector(".sample-not-for-use")?.addEventListener('click', function() {
+    CustomAnalyitcsEventEmitter.dispatch('customAnalyitcsEvent', sampleData);
+});

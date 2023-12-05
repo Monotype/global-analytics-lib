@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "VITE_APP_VERSION=$(node -p \"require('./package.json').version\") vite build && esbuild dist/$(node -p \"require('./package.json').version\")/global-analytics-lib.js --bundle --minify --outfile=dist/$(node -p \"require('./package.json').version\")/global-analytics-lib.min.js",
+    "build": "VITE_APP_VERSION=$(node -p \"require('./package.json').version\") vite build && terser dist/$(node -p \"require('./package.json').version\")/global-analytics-lib.js -c -o dist/$(node -p \"require('./package.json').version\")/global-analytics-lib.min.js",
     "preview": "vite preview"
   },
   "devDependencies": {
+    "terser": "^5.24.0",
     "vite": "^5.0.0"
   }
 }
