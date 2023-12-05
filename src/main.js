@@ -1,5 +1,5 @@
 // Vimeo player API to track vimeo player events
-import "https://player.vimeo.com/api/player.js";
+// import Player from '@vimeo/player';
 
 // Description: This file is used to push data to adobeDataLayer object
 // adobeDataLayer declaration
@@ -482,81 +482,85 @@ let videoLengthPercentage = 0;
 
 let videoStarted = false;
 
-Array.from(iframes).map(iframe => {
-    if (iframe && iframe.src && iframe.src.includes("vimeo")) {
-        const player = new Vimeo.Player(iframe);
+if (typeof Vimeo === 'undefined' || typeof Vimeo.Player === 'undefined') {
+    console.log('Load Vimeo Player library to track Vimeo videos - https://player.vimeo.com/api/player.js');
+  } else {
+    Array.from(iframes).map(iframe => {
+        if (iframe && iframe.src && iframe.src.includes("vimeo")) {
+            const player = new Vimeo.Player(iframe);
 
-        let videoDuration;
+            let videoDuration;
 
-        let videoProgressPercent = 0;
+            let videoProgressPercent = 0;
 
-        let videoName = iframe.parentElement.dataset.analyticsVideoname ? iframe.parentElement.dataset.analyticsVideoname : pageInfoObj.pageInfo?.pageName;
+            let videoName = iframe.parentElement.dataset.analyticsVideoname ? iframe.parentElement.dataset.analyticsVideoname : pageInfoObj.pageInfo?.pageName;
 
-        player.getDuration().then(function (duration) {
-            videoDuration = duration;
-        });
+            player.getDuration().then(function (duration) {
+                videoDuration = duration;
+            });
 
-        player.on('play', function () {
-            if (!videoStarted) {
+            player.on('play', function () {
+                if (!videoStarted) {
+                    window.adobeDataLayer.push({
+                        "event": "videoStart",
+                        "video": {
+                            "videoName": videoName,
+                            "videoLength": `${videoDuration}`
+                        }
+                    });
+                    videoStarted = true;
+                }
+            });
+
+            player.on('pause', function () {
+                videoStarted = false;
+                if (videoLengthPercentage < 100) {
+                    window.adobeDataLayer.push({
+                        "event": "videoPause",
+                        "video": {
+                            "videoName": videoName,
+                            "videoLength": `${videoDuration}`,
+                            "videoPercent": videoProgressPercent
+                        }
+                    });
+                }
+            });
+
+            player.on('ended', function () {
                 window.adobeDataLayer.push({
-                    "event": "videoStart",
-                    "video": {
-                        "videoName": videoName,
-                        "videoLength": `${videoDuration}`
-                    }
-                });
-                videoStarted = true;
-            }
-        });
-
-        player.on('pause', function () {
-            videoStarted = false;
-            if (videoLengthPercentage < 100) {
-                window.adobeDataLayer.push({
-                    "event": "videoPause",
+                    "event": "videoComplete",
                     "video": {
                         "videoName": videoName,
                         "videoLength": `${videoDuration}`,
                         "videoPercent": videoProgressPercent
                     }
                 });
-            }
-        });
+            });
 
-        player.on('ended', function () {
-            window.adobeDataLayer.push({
-                "event": "videoComplete",
-                "video": {
-                    "videoName": videoName,
-                    "videoLength": `${videoDuration}`,
-                    "videoPercent": videoProgressPercent
+            player.on('timeupdate', function (data) {
+                let currentTime = data.seconds;
+                let duration = data.duration;
+
+                let progress = Math.floor((currentTime / duration) * 100);
+
+                if (milestoneReached[progress] === false) {
+                    window.adobeDataLayer.push({
+                        "event": "videoProgress",
+                        "video": {
+                            "videoName": videoName,
+                            "videoLength": `${videoDuration}`,
+                            "videoPercent": progress + "%"
+                        }
+                    });
+                    milestoneReached[progress] = true;
+                } else {
+                    videoProgressPercent = progress + "%";
+                    videoLengthPercentage = progress;
                 }
             });
-        });
-
-        player.on('timeupdate', function (data) {
-            let currentTime = data.seconds;
-            let duration = data.duration;
-
-            let progress = Math.floor((currentTime / duration) * 100);
-
-            if (milestoneReached[progress] === false) {
-                window.adobeDataLayer.push({
-                    "event": "videoProgress",
-                    "video": {
-                        "videoName": videoName,
-                        "videoLength": `${videoDuration}`,
-                        "videoPercent": progress + "%"
-                    }
-                });
-                milestoneReached[progress] = true;
-            } else {
-                videoProgressPercent = progress + "%";
-                videoLengthPercentage = progress;
-            }
-        });
-    }
-});
+        }
+    });
+}
 
 const vids = document.querySelectorAll('video');
 
