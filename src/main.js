@@ -1,5 +1,6 @@
 // Description: This file is used to push data to adobeDataLayer object
 // adobeDataLayer declaration
+// Deployment test comment.
 window.adobeDataLayer = window.adobeDataLayer || [];
 // Get pageInfo object from global variable
 const pageInfoObj = typeof pageInfoGlobal != 'undefined' ? JSON.parse(JSON.stringify(pageInfoGlobal)) : {};
