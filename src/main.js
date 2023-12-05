@@ -10,7 +10,7 @@ const crypto = window.crypto || window.msCrypto;
 const pageInfoObj = typeof pageInfoGlobal != 'undefined' ? JSON.parse(JSON.stringify(pageInfoGlobal)) : {};
 
 // Check if the page is search page
-const hasCustomPageLoad = window.location.pathname.includes('search') || window.location.pathname.includes('whatthefont') || pageInfoObj.hasCustomPageLoad;
+const hasCustomPageLoad = window.location.pathname.includes('search') || pageInfoObj.hasCustomPageLoad;
 
 let formabandonField = '';
 
@@ -773,3 +773,12 @@ function getSearchTypeTesterData(typeTesterData) {
         window.adobeDataLayer.push(typeTesterEventData);
     }
 }
+
+let sampleData = {
+    "event": "sampleEvent",
+    "eventInfo": "sampleClick"
+  };
+
+  document.querySelector(".sample-not-for-use")?.addEventListener('click', function() {
+    CustomAnalyitcsEventEmitter.dispatch('customAnalyitcsEvent', sampleData);
+  });
