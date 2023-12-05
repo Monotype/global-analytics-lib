@@ -3,7 +3,6 @@
 
 // Description: This file is used to push data to adobeDataLayer object
 // adobeDataLayer declaration
-// Deployment test comment.
 window.adobeDataLayer = window.adobeDataLayer || [];
 
 const crypto = window.crypto || window.msCrypto;
@@ -18,7 +17,7 @@ let formabandonField = '';
 const cookieConsent = document.cookie.split(';').filter((item) => item.trim().startsWith('OptanonConsent='));
 
 // Custom event for link click
-const CustomAnalyitcsEventEmitter = {
+const CustomAnalyticsEventEmitter = {
     dispatch: function (eventName, eventData) {
         let customEvent = new CustomEvent(eventName, {
             detail: eventData,
@@ -132,7 +131,7 @@ document.addEventListener('DOMContentLoaded', (e) => {
             getIntercomAnalytics();
         }
     }, true);
-    document.addEventListener('customAnalyitcsEvent', function (e) {
+    document.addEventListener('customAnalyticsEvent', function (e) {
         let eventData = e.detail;
         window.adobeDataLayer.push(eventData);
     });
@@ -775,11 +774,13 @@ function getSearchTypeTesterData(typeTesterData) {
     }
 }
 
-let sampleData = {
-    "event": "sampleEvent",
-    "eventInfo": "sampleClick"
-};
-
-document.querySelector(".sample-not-for-use")?.addEventListener('click', function() {
-    CustomAnalyitcsEventEmitter.dispatch('customAnalyitcsEvent', sampleData);
-});
+// Attach the variables and functions to the global object if not used in this script
+if (typeof window !== 'undefined') {
+    window.CustomAnalyticsEventEmitter = CustomAnalyticsEventEmitter;
+    window.sendSearchResultClickInfo = sendSearchResultClickInfo;
+    window.getInlinePageInfo = getInlinePageInfo;
+    window.getSearchResultPageInfo = getSearchResultPageInfo;
+    window.getSearchFilterData = getSearchFilterData;
+    window.getSearchSortData = getSearchSortData;
+    window.getSearchTypeTesterData = getSearchTypeTesterData;
+}
