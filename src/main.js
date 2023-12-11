@@ -191,7 +191,7 @@ function getformAbandonField(formFields) {
 function getFormName(formEl) {
     if (formEl.parentElement.classList.contains('gated-marketo')) {
         return formEl.previousElementSibling.innerText;
-    } else if (formEl.parentElement.dataset.id) {
+    } else if (formEl.parentElement.dataset.id || formEl.parentElement.dataset.form) {
         return formEl.parentElement.children[0].innerText;
     } else if (formEl.parentElement.previousElementSibling?.classList.contains('marketo-main-title')) {
         return formEl.parentElement.previousElementSibling.innerText;
