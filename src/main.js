@@ -653,12 +653,10 @@ function sendSearchResultClickInfo(searchType, fontDetail) {
     const eventData = fontDetail.data.eventData;
     let serachObj = {};
     let event = "searchResultClick";
-    let eventInfo = "searchResultPage";
     if (searchType == "inline") {
         serachObj = {
             "searchType": searchType,
             "inlineSearchTerm": eventData.inlineSearchTerm,
-            "inlineSearchType": eventData.inlineSearchType,
             "inlineSearchResultTerm": eventData.inlineSearchResultTerm,
             "inlineSearchResultClicked": fontDetail.data.title,
             "inlineSearchResultClickPos": eventData.positions[0].toString(),
@@ -668,7 +666,7 @@ function sendSearchResultClickInfo(searchType, fontDetail) {
         event = "wtfSearchResultClick";
         serachObj = {
             "searchType": searchType,
-            "wtfSearchType": eventData.inlineSearchType,
+            "wtfSearchType": "",
             "wtfSearchResultClicked": fontDetail.data.title,
             "wtfSearchResultPage": getUrlParameter("page") ? getUrlParameter("page") : "1",
             "wtfSearchResultClickPos": eventData.positions[0].toString(),
@@ -676,7 +674,6 @@ function sendSearchResultClickInfo(searchType, fontDetail) {
     }
     window.adobeDataLayer.push({
         "event": event,
-        "eventInfo": eventInfo,
         "search": serachObj,
         "font": {
             "fontID": fontDetail.data.family_id,
