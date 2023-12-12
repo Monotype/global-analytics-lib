@@ -694,7 +694,7 @@ function getInlinePageInfo(event, searchObj) {
         inlineSearchType: searchObj.searchTabName,
         inlineSearchCategory: searchObj.searchCategory,
         inlineSearchCatVal: searchObj.searchCategoryValue,
-        inlineSearchSuggestClickedPosition: searchObj.searchSuggestClickedPos,
+        inlineSearchSuggestClickedPosition: searchObj.searchSuggestClickedPos.toString(),
 
     }
     console.log("final search data : ", searchData);
