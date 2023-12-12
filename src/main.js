@@ -3,22 +3,22 @@
 
 // Description: This file is used to push data to adobeDataLayer object
 // adobeDataLayer declaration
-// Deployment test comment.
 window.adobeDataLayer = window.adobeDataLayer || [];
 
 const crypto = window.crypto || window.msCrypto;
+
 // Get pageInfo object from global variable
 const pageInfoObj = typeof pageInfoGlobal != 'undefined' ? JSON.parse(JSON.stringify(pageInfoGlobal)) : {};
 
-// Check if the page is search page
-const hasCustomPageLoad = window.location.pathname.includes('search') || pageInfoObj.hasCustomPageLoad;
+// Identifier to check if a page has any custom pageLoad event
+const hasCustomPageLoad = pageInfoObj.hasCustomPageLoad ?? false;
 
 let formabandonField = '';
 
 const cookieConsent = document.cookie.split(';').filter((item) => item.trim().startsWith('OptanonConsent='));
 
 // Custom event for link click
-const CustomAnalyitcsEventEmitter = {
+const CustomAnalyticsEventEmitter = {
     dispatch: function (eventName, eventData) {
         let customEvent = new CustomEvent(eventName, {
             detail: eventData,
@@ -36,9 +36,9 @@ const linkClickAttributes = {
     "linksection": "links|linkSection",
     "linkname": "links|linkName",
     "linktype": "links|linkType",
-    "family": "fonts",
-    "foundary": "fonts",
-    "language": "fonts",
+    "family": "font",
+    "foundary": "font",
+    "language": "font",
     "resourcetopic": "content|resourceTopic",
     "resourcetitle": "content|resourceTitle"
 }
@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded', (e) => {
             getIntercomAnalytics();
         }
     }, true);
-    document.addEventListener('customAnalyitcsEvent', function (e) {
+    document.addEventListener('customAnalyticsEvent', function (e) {
         let eventData = e.detail;
         window.adobeDataLayer.push(eventData);
     });
@@ -191,7 +191,7 @@ function getformAbandonField(formFields) {
 function getFormName(formEl) {
     if (formEl.parentElement.classList.contains('gated-marketo')) {
         return formEl.previousElementSibling.innerText;
-    } else if (formEl.parentElement.dataset.id) {
+    } else if (formEl.parentElement.dataset.id || formEl.parentElement.dataset.form) {
         return formEl.parentElement.children[0].innerText;
     } else if (formEl.parentElement.previousElementSibling?.classList.contains('marketo-main-title')) {
         return formEl.parentElement.previousElementSibling.innerText;
@@ -275,9 +275,10 @@ function getAllTargetElements() {
 }
 
 // Get analytics data on link clicks - used copilot to generate this function
-function getAnalyticsOnLinkClicks() {
+function getAnalyticsOnLinkClicks(stopPropagation) {
     getAllTargetElements()?.forEach(el => {
         el.addEventListener("click", (event) => {
+            stopPropagation ? event.stopImmediatePropagation() : '';
             if (!el.dataset.analyticsIscustomevent) {
                 let dataAttributes = Object.keys(el.dataset).filter(key => key.startsWith("analytics"));
                 let linkClickData = {};
@@ -466,7 +467,6 @@ window.addEventListener('beforeunload', function (e) {
             });
         }
     }
-    console.log("adobeDataLayer: ", window.adobeDataLayer);
 });
 
 // Vimeo and mp4 video tracking
@@ -485,7 +485,7 @@ let videoStarted = false;
 
 if (typeof Vimeo === 'undefined' || typeof Vimeo.Player === 'undefined') {
     console.log('Load Vimeo Player library to track Vimeo videos - https://player.vimeo.com/api/player.js');
-  } else {
+} else {
     Array.from(iframes).map(iframe => {
         if (iframe && iframe.src && iframe.src.includes("vimeo")) {
             const player = new Vimeo.Player(iframe);
@@ -661,18 +661,17 @@ function sendSearchResultClickInfo(searchType, fontDetail) {
             "inlineSearchType": eventData.inlineSearchType,
             "inlineSearchResultTerm": eventData.inlineSearchResultTerm,
             "inlineSearchResultClicked": fontDetail.data.title,
-            "inlineSearchResultClickPos": eventData.positions[0],
+            "inlineSearchResultClickPos": eventData.positions[0].toString(),
         }
     }
     if (searchType == "wtf") {
         event = "wtfSearchResultClick";
-        eventInfo = "wtfSearchResultPage";
         serachObj = {
             "searchType": searchType,
             "wtfSearchType": eventData.inlineSearchType,
             "wtfSearchResultClicked": fontDetail.data.title,
-            "wtfSearchResultPage": getUrlParameter("page") ? getUrlParameter("page") : 1,
-            "wtfSearchResultClickPos": eventData.positions[0],
+            "wtfSearchResultPage": getUrlParameter("page") ? getUrlParameter("page") : "1",
+            "wtfSearchResultClickPos": eventData.positions[0].toString(),
         }
     }
     window.adobeDataLayer.push({
@@ -714,21 +713,21 @@ function getSearchResultPageInfo(event, eventInfo, findingMethod, searchObj) {
             "searchType": searchObj.searchType,
             "inlineSearchTerm": searchObj.searchTerm,
             "inlineSearchType": searchObj.inlineSearchType,
-            "inlineSearchResultCount": searchObj.searchResultCount
+            "inlineSearchResultCount": searchObj.searchResultCount.toString()
         }
     }
     if (searchObj.searchType == "wtf") {
         searchData.eventInfo = "wtfSearchResultPage";
         searchData.search = {
             "searchType": searchObj.searchType,
-            "wtfsearchType": searchObj.searchType, // this need to be actually how user landend on wtf page
-            "wtfSearchResultCount": searchObj.searchResultCount
+            "wtfsearchType": "", // this need to be actually how user landend on wtf page
+            "wtfSearchResultCount": searchObj.searchResultCount.toString()
         }
     }
     console.log("final search data", searchData);
     if (event == "pageLoad") {
         pageInfoObj.pageInfo.eventInfo = searchData.eventInfo;
-        pageInfoObj.pageInfo.findingMethod = findingMethod;
+        pageInfoObj.pageInfo.findingMethod = pageInfoObj.pageInfo.findingMethod ? pageInfoObj.pageInfo.findingMethod : findingMethod;
         pageInfoObj.search = searchData.search;
         //console.log("pageInfoObj", pageInfoObj);
         getDataLayerInfo('pageLoad', pageInfoObj.pageInfo.eventInfo ?? 'regularPageLoad');
@@ -740,7 +739,7 @@ function getSearchResultPageInfo(event, eventInfo, findingMethod, searchObj) {
 function getSearchFilterData(filterType, filterApplied) {
     const searchFilterData = {
         "event": "filterApplied",
-        "content": {
+        "filter": {
             "filterType": filterType,
             "filterApplied": filterApplied
         }
@@ -775,11 +774,13 @@ function getSearchTypeTesterData(typeTesterData) {
     }
 }
 
-let sampleData = {
-    "event": "sampleEvent",
-    "eventInfo": "sampleClick"
-};
-
-document.querySelector(".sample-not-for-use")?.addEventListener('click', function() {
-    CustomAnalyitcsEventEmitter.dispatch('customAnalyitcsEvent', sampleData);
-});
+// Attach the variables and functions to the global object if not used in this script
+if (typeof window !== 'undefined') {
+    window.CustomAnalyticsEventEmitter = CustomAnalyticsEventEmitter;
+    window.sendSearchResultClickInfo = sendSearchResultClickInfo;
+    window.getInlinePageInfo = getInlinePageInfo;
+    window.getSearchResultPageInfo = getSearchResultPageInfo;
+    window.getSearchFilterData = getSearchFilterData;
+    window.getSearchSortData = getSearchSortData;
+    window.getSearchTypeTesterData = getSearchTypeTesterData;
+}
