@@ -382,7 +382,7 @@ function getFormStartAnalytics(form, formName, formFields) {
         "event": "formStart",
         "form": {
             "formName": formName,
-            "formFieldCount": `${formFields.length}`,
+            "formfieldCount": `${formFields.length}`,
         }
     }
     // check if data layer already has formStart event
