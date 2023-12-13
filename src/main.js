@@ -708,8 +708,8 @@ function getSearchResultPageInfo(event, eventInfo, findingMethod, searchObj) {
         searchData.eventInfo = "searchResult"
         searchData.search = {
             "searchType": searchObj.searchType,
-            "inlineSearchTerm": searchObj.searchTerm,
-            "inlineSearchResultTerm": searchObj.searchTerm,
+            "inlineSearchTerm":  pageInfoGlobal.pageInfo.inlineSearchTerm ?  pageInfoGlobal.pageInfo.inlineSearchTerm : searchObj.searchTerm,
+            "inlineSearchResultTerm":  pageInfoGlobal.pageInfo.inlineSearchResultTerm ?  pageInfoGlobal.pageInfo.inlineSearchResultTerm : searchObj.searchTerm,
             "inlineSearchResultCount": searchObj.searchResultCount.toString()
         }
     }
