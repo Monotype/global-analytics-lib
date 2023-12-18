@@ -119,7 +119,9 @@ function getUserInfo() {
 }
 
 // Add a click event listener to the document
-document.addEventListener('DOMContentLoaded', (e) => {
+document.addEventListener('DOMContentLoaded', () => {
+    let lazyLoadElements = pageInfoObj.lazyLoadIdentifier?.split(',');
+    delete pageInfoObj.lazyLoadIdentifier;
     delete pageInfoObj.hasCustomPageLoad;
     if (!hasCustomPageLoad) {
         getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad');
@@ -136,14 +138,30 @@ document.addEventListener('DOMContentLoaded', (e) => {
         let eventData = e.detail;
         window.adobeDataLayer.push(eventData);
     });
+    getLazyLoadedElements(lazyLoadElements);
 });
+
+function getLazyLoadedElements(elements) {
+    elements?.forEach(element => {
+        document.querySelector(element)?.addEventListener('click', function (event) {
+            if (element == '.mt-load-more-elements-wrapper') {
+                getResourceTileElement();
+            } else {
+                getAnalyticsOnLinkClicks(true);
+            }
+        }, true);
+    })
+}
 
 function getPageSection() {
     let pathname = window.location.pathname;
     if (typeof Drupal !== 'undefined') {
         return (pathname.split('/')[1] == Drupal.currentLanguage) ? pathname.split('/')[2] : pathname.split('/')[1];
     }
-    return pathname.split('/')[1];
+    if (pathname.split('/')[1] == document.documentElement.lang) {
+        return (pathname.split('/')[2] == 'a') ? pathname.split('/')[3] : pathname.split('/')[2];
+    }
+    return (pathname.split('/')[1] == 'a') ? pathname.split('/')[2] : pathname.split('/')[1];
 }
 
 if (typeof MktoForms2 === 'undefined') {
@@ -165,7 +183,7 @@ if (typeof MktoForms2 === 'undefined') {
                     checkboxObj[checkbox.name] = checkbox.value == 'yes' ? 'enable' : 'disable';
                 }
             });
-            formabandonField = getformAbandonField(formFields);
+            getformAbandonField(formFields);
             getFormStartAnalytics(form, formName, formFields);
             form.onSubmit(function () {
                 getFormSubmitAnalytics(form, formName, formFields, checkboxObj);
@@ -179,13 +197,12 @@ if (typeof MktoForms2 === 'undefined') {
 
 // add onblur event to all form fields to get the last field that user has interacted with
 function getformAbandonField(formFields) {
-    let abandonedField = formFields[0]?.name;
+    formabandonField = formFields[0]?.name;
     formFields.forEach(field => {
         field.addEventListener('blur', (event) => {
             formabandonField = field.name;
         });
     });
-    return abandonedField;
 }
 
 function getFormName(formEl) {
@@ -278,27 +295,11 @@ function getAllTargetElements() {
 function getAnalyticsOnLinkClicks(stopPropagation) {
     getAllTargetElements()?.forEach(el => {
         el.addEventListener("click", (event) => {
-            stopPropagation ? event.stopImmediatePropagation() : '';
+            stopPropagation && event.stopImmediatePropagation();
             if (!el.dataset.analyticsIscustomevent) {
                 let dataAttributes = Object.keys(el.dataset).filter(key => key.startsWith("analytics"));
                 let linkClickData = {};
-                dataAttributes.forEach(key => {
-                    // remove analytics from key and get category in small case and split by _ and capitalize last word
-                    let category = key.replace("analytics", "").toLowerCase();
-                    if (linkClickAttributes[category]) {
-                        let linkDataAttr = linkClickAttributes[category].split("|");
-                        let linkDataAttrKey = linkDataAttr[1] ?? category;
-                        // create object with category as key and value as object with key as category and value as data attribute value
-                        // check if category already exists in object then add new key value pair to existing object
-                        if (linkClickData[linkDataAttr[0]]) {
-                            linkClickData[linkDataAttr[0]][linkDataAttrKey] = el.dataset[key];
-                        } else {
-                            linkClickData[linkDataAttr[0]] = {
-                                [linkDataAttrKey]: el.dataset[key]
-                            }
-                        }
-                    }
-                });
+                createLinkClickData(el, linkClickData, dataAttributes);
                 // check if linkclickdata has any values then push to dataLayer
                 if (Object.keys(linkClickData).length) {
                     pushLinkClickEvent(linkClickData, el.dataset['analyticsEvent'] ?? 'linkClick');
@@ -306,6 +307,26 @@ function getAnalyticsOnLinkClicks(stopPropagation) {
             }
         });
     })
+}
+
+function createLinkClickData(el, linkClickData, dataAttributes) {
+    dataAttributes.forEach(key => {
+        // remove analytics from key and get category in small case and split by _ and capitalize last word
+        let category = key.replace("analytics", "").toLowerCase();
+        if (linkClickAttributes[category]) {
+            let linkDataAttr = linkClickAttributes[category].split("|");
+            let linkDataAttrKey = linkDataAttr[1] ?? category;
+            // create object with category as key and value as object with key as category and value as data attribute value
+            // check if category already exists in object then add new key value pair to existing object
+            if (linkClickData[linkDataAttr[0]]) {
+                linkClickData[linkDataAttr[0]][linkDataAttrKey] = el.dataset[key];
+            } else {
+                linkClickData[linkDataAttr[0]] = {
+                    [linkDataAttrKey]: el.dataset[key]
+                }
+            }
+        }
+    });
 }
 
 // Get click data for cookie elements
@@ -390,7 +411,7 @@ function getFormStartAnalytics(form, formName, formFields) {
         field.addEventListener('focus', () => {
             if (!isEventPushed('formStart')) {
                 window.adobeDataLayer.push(formStartEvent);
-            };
+            }
         });
     });
 }
@@ -422,7 +443,7 @@ function getFormSuccessAnalytics(form, formName, formFields) {
 }
 
 // Trigger formAbandon event when user abandon the form
-function getFormAbandonAnalytics(form, formName, formFields, formabandonField) {
+function getFormAbandonAnalytics(form, formName, formFields) {
     let formAbandonEvent = {
         "event": "formAbandon",
         "form": {
@@ -446,25 +467,32 @@ function isEventPushed(eventName) {
     return false;
 }
 
+// Cross-browser function to get the document visibility state
+function getVisibilityState() {
+    return document.visibilityState || document.webkitVisibilityState || document.mozVisibilityState || "visible";
+}
+
 // call getFormAbandonAnalytics when user leaves the page without submitting the form
-window.addEventListener('beforeunload', function (e) {
-    if (isEventPushed('formStart') && !isEventPushed('formSubmit')) {
-        // get all forms with class .mktoForm and an id
-        let marketoForms = document.querySelectorAll('.mktoForm[id]');
-        if (marketoForms.length > 0) {
-            marketoForms.forEach(form => {
-                let formName = getFormName(form);
-                let formFields = form.querySelectorAll('.mktoField:not([type="hidden"])');
-                getFormAbandonAnalytics(form, formName, formFields, formabandonField);
-            });
-        } else {
-            let webforms = document.querySelectorAll('.webform-submission-form');
-            webforms.forEach(form => {
-                let formName = form.previousElementSibling?.innerText;
-                // Get all input, select, textarea , checkbox and radio fields from the form
-                let formFields = form.querySelectorAll(".analytics-field");
-                getFormAbandonAnalytics(form, formName, formFields, formabandonField);
-            });
+document.addEventListener("visibilitychange", function () {
+    if (getVisibilityState() === "hidden") {
+        if (isEventPushed('formStart') && !isEventPushed('formSubmit')) {
+            // get all forms with class .mktoForm and an id
+            let marketoForms = document.querySelectorAll('.mktoForm[id]');
+            if (marketoForms.length > 0) {
+                marketoForms.forEach(form => {
+                    let formName = getFormName(form);
+                    let formFields = form.querySelectorAll('.mktoField:not([type="hidden"])');
+                    getFormAbandonAnalytics(form, formName, formFields);
+                });
+            } else {
+                let webforms = document.querySelectorAll('.webform-submission-form');
+                webforms.forEach(form => {
+                    let formName = form.previousElementSibling?.innerText;
+                    // Get all input, select, textarea , checkbox and radio fields from the form
+                    let formFields = form.querySelectorAll(".analytics-field");
+                    getFormAbandonAnalytics(form, formName, formFields);
+                });
+            }
         }
     }
 });
@@ -483,16 +511,16 @@ let videoLengthPercentage = 0;
 
 let videoStarted = false;
 
+let videoProgressPercent = 0;
+
 if (typeof Vimeo === 'undefined' || typeof Vimeo.Player === 'undefined') {
     console.log('Load Vimeo Player library to track Vimeo videos - https://player.vimeo.com/api/player.js');
 } else {
     Array.from(iframes).map(iframe => {
-        if (iframe && iframe.src && iframe.src.includes("vimeo")) {
+        if (iframe?.src?.includes("vimeo")) {
             const player = new Vimeo.Player(iframe);
 
             let videoDuration;
-
-            let videoProgressPercent = 0;
 
             let videoName = iframe.parentElement.dataset.analyticsVideoname ? iframe.parentElement.dataset.analyticsVideoname : pageInfoObj.pageInfo?.pageName;
 
@@ -501,16 +529,7 @@ if (typeof Vimeo === 'undefined' || typeof Vimeo.Player === 'undefined') {
             });
 
             player.on('play', function () {
-                if (!videoStarted) {
-                    window.adobeDataLayer.push({
-                        "event": "videoStart",
-                        "video": {
-                            "videoName": videoName,
-                            "videoLength": `${videoDuration}`
-                        }
-                    });
-                    videoStarted = true;
-                }
+                getVideoStartAnalytics(videoName, videoDuration);
             });
 
             player.on('pause', function () {
@@ -528,14 +547,7 @@ if (typeof Vimeo === 'undefined' || typeof Vimeo.Player === 'undefined') {
             });
 
             player.on('ended', function () {
-                window.adobeDataLayer.push({
-                    "event": "videoComplete",
-                    "video": {
-                        "videoName": videoName,
-                        "videoLength": `${videoDuration}`,
-                        "videoPercent": videoProgressPercent
-                    }
-                });
+                getVideoEndAnalytics(videoName, videoDuration);
             });
 
             player.on('timeupdate', function (data) {
@@ -543,21 +555,7 @@ if (typeof Vimeo === 'undefined' || typeof Vimeo.Player === 'undefined') {
                 let duration = data.duration;
 
                 let progress = Math.floor((currentTime / duration) * 100);
-
-                if (milestoneReached[progress] === false) {
-                    window.adobeDataLayer.push({
-                        "event": "videoProgress",
-                        "video": {
-                            "videoName": videoName,
-                            "videoLength": `${videoDuration}`,
-                            "videoPercent": progress + "%"
-                        }
-                    });
-                    milestoneReached[progress] = true;
-                } else {
-                    videoProgressPercent = progress + "%";
-                    videoLengthPercentage = progress;
-                }
+                getVideoProgress(progress, videoName, videoDuration);
             });
         }
     });
@@ -573,21 +571,10 @@ Array.from(vids).map(vid => {
 
             let videoDuration = Math.floor(vid.duration);
 
-            let videoProgressPercent = 0;
-
             let videoName = vid.dataset.analyticsVideoname ? vid.dataset.analyticsVideoname : pageInfoObj.pageInfo?.pageName;
 
             vid.addEventListener('play', function () {
-                if (!videoStarted) {
-                    window.adobeDataLayer.push({
-                        "event": "videoStart",
-                        "video": {
-                            "videoName": videoName,
-                            "videoLength": `${videoDuration}`
-                        }
-                    });
-                    videoStarted = true;
-                }
+                getVideoStartAnalytics(videoName, videoDuration);
             });
 
             vid.addEventListener('pause', function () {
@@ -605,14 +592,7 @@ Array.from(vids).map(vid => {
             });
 
             vid.addEventListener('ended', function () {
-                window.adobeDataLayer.push({
-                    "event": "videoComplete",
-                    "video": {
-                        "videoName": videoName,
-                        "videoLength": `${videoDuration}`,
-                        "videoPercent": videoProgressPercent
-                    }
-                });
+                getVideoEndAnalytics(videoName, videoDuration);
             });
 
             vid.addEventListener('timeupdate', function () {
@@ -620,43 +600,72 @@ Array.from(vids).map(vid => {
 
                 let progress = Math.floor((Math.floor(currentTime) / videoDuration) * 100);
 
-                if (milestoneReached[progress] === false) {
-                    window.adobeDataLayer.push({
-                        "event": "videoProgress",
-                        "video": {
-                            "videoName": videoName,
-                            "videoLength": `${videoDuration}`,
-                            "videoPercent": progress + "%"
-                        }
-                    });
-                    milestoneReached[progress] = true;
-                } else {
-                    videoProgressPercent = progress + "%";
-                    videoLengthPercentage = progress;
-                }
+                getVideoProgress(progress, videoName, videoDuration);
             });
 
         });
     }
 });
 
+function getVideoProgress(progress, videoName, videoDuration) {
+    if (milestoneReached[progress] === false) {
+        window.adobeDataLayer.push({
+            "event": "videoProgress",
+            "video": {
+                "videoName": videoName,
+                "videoLength": `${videoDuration}`,
+                "videoPercent": progress + "%"
+            }
+        });
+        milestoneReached[progress] = true;
+    } else {
+        videoProgressPercent = progress + "%";
+        videoLengthPercentage = progress;
+    }
+}
+
+function getVideoStartAnalytics(videoName, videoDuration) {
+    if (!videoStarted) {
+        window.adobeDataLayer.push({
+            "event": "videoStart",
+            "video": {
+                "videoName": videoName,
+                "videoLength": `${videoDuration}`
+            }
+        });
+        videoStarted = true;
+    }
+}
+
+function getVideoEndAnalytics(videoName, videoDuration) {
+    window.adobeDataLayer.push({
+        "event": "videoComplete",
+        "video": {
+            "videoName": videoName,
+            "videoLength": `${videoDuration}`,
+            "videoPercent": videoProgressPercent
+        }
+    });
+}
+
 // Inline search and search result page analytics
 
 function getUrlParameter(attributeName) {
-    var url = window.location.href;
-    var urlSearchParams = new URLSearchParams(url);
-    var value = urlSearchParams.get(attributeName);
-    return value;
+    let url = window.location.href;
+    let urlSearchParams = new URLSearchParams(url);
+    return urlSearchParams.get(attributeName);
 }
 function sendSearchResultClickInfo(searchType, fontDetail) {
     console.log(fontDetail);
     const eventData = fontDetail.data.eventData;
     let serachObj = {};
     let event = "searchResultClick";
+    let eventInfo = "searchResultPage";
     if (searchType == "inline") {
         serachObj = {
             "searchType": searchType,
             "inlineSearchTerm": eventData.inlineSearchTerm,
+            "inlineSearchType": eventData.inlineSearchType,
             "inlineSearchResultTerm": eventData.inlineSearchResultTerm,
             "inlineSearchResultClicked": fontDetail.data.title,
             "inlineSearchResultClickPos": eventData.positions[0].toString(),
@@ -666,7 +675,7 @@ function sendSearchResultClickInfo(searchType, fontDetail) {
         event = "wtfSearchResultClick";
         serachObj = {
             "searchType": searchType,
-            "wtfSearchType": "",
+            "wtfSearchType": eventData.inlineSearchType,
             "wtfSearchResultClicked": fontDetail.data.title,
             "wtfSearchResultPage": getUrlParameter("page") ? getUrlParameter("page") : "1",
             "wtfSearchResultClickPos": eventData.positions[0].toString(),
@@ -674,6 +683,7 @@ function sendSearchResultClickInfo(searchType, fontDetail) {
     }
     window.adobeDataLayer.push({
         "event": event,
+        "eventInfo": eventInfo,
         "search": serachObj,
         "font": {
             "fontID": fontDetail.data.family_id,
@@ -694,7 +704,7 @@ function getInlinePageInfo(event, searchObj) {
         inlineSearchType: searchObj.searchTabName,
         inlineSearchCategory: searchObj.searchCategory,
         inlineSearchCatVal: searchObj.searchCategoryValue,
-        inlineSearchSuggestClickedPosition: searchObj.searchSuggestClickedPos.toString(),
+        inlineSearchSuggestClickedPosition: searchObj.searchSuggestClickedPos,
 
     }
     console.log("final search data : ", searchData);
@@ -708,8 +718,8 @@ function getSearchResultPageInfo(event, eventInfo, findingMethod, searchObj) {
         searchData.eventInfo = "searchResult"
         searchData.search = {
             "searchType": searchObj.searchType,
-            "inlineSearchTerm":  pageInfoGlobal.pageInfo.inlineSearchTerm ?  pageInfoGlobal.pageInfo.inlineSearchTerm : searchObj.searchTerm,
-            "inlineSearchResultTerm":  pageInfoGlobal.pageInfo.inlineSearchResultTerm ?  pageInfoGlobal.pageInfo.inlineSearchResultTerm : searchObj.searchTerm,
+            "inlineSearchTerm": searchObj.searchTerm,
+            "inlineSearchType": searchObj.inlineSearchType,
             "inlineSearchResultCount": searchObj.searchResultCount.toString()
         }
     }
@@ -726,7 +736,6 @@ function getSearchResultPageInfo(event, eventInfo, findingMethod, searchObj) {
         pageInfoObj.pageInfo.eventInfo = searchData.eventInfo;
         pageInfoObj.pageInfo.findingMethod = pageInfoObj.pageInfo.findingMethod ? pageInfoObj.pageInfo.findingMethod : findingMethod;
         pageInfoObj.search = searchData.search;
-        //console.log("pageInfoObj", pageInfoObj);
         getDataLayerInfo('pageLoad', pageInfoObj.pageInfo.eventInfo ?? 'regularPageLoad');
     } else {
         window.adobeDataLayer.push(searchData);
@@ -771,9 +780,44 @@ function getSearchTypeTesterData(typeTesterData) {
     }
 }
 
+// Add click event to Resource listing image and title
+function getResourceTileElement() {
+    document.querySelectorAll('.component-main-wrapper').forEach(element => {
+        // check if element has any data attributes starting with analytics
+        if (Object.keys(element.dataset).some(key => key.startsWith('analytics'))) {
+            element.addEventListener('click', (event) => {
+                event.stopImmediatePropagation();
+                let linkType = event.target.tagName == 'IMG' ? 'image' : 'text';
+                let isLinkorImgElement = event.target.parentElement.classList.contains('component-title') || event.target.tagName == 'IMG';
+                if (event.target.dataset && isLinkorImgElement) {
+                    pushResourceClickEventData(element, linkType);
+                }
+            });
+        }
+    });
+}
+
+// Push resource link click event to data layer
+function pushResourceClickEventData(element, linkType) {
+    window.adobeDataLayer.push({
+        event: element.dataset.analyticsEvent ?? 'linkClick',
+        links: {
+            linkCategory: element.dataset.analyticsLinkcategory,
+            linkSection: element.dataset.analyticsLinksection,
+            linkName: element.dataset.analyticsLinkname,
+            linkType: linkType
+        },
+        content: {
+            resourceTopic: element.dataset.analyticsResourcetopic,
+            resourceTitle: element.dataset.analyticsResourcetitle
+        }
+    });
+}
+
 // Attach the variables and functions to the global object if not used in this script
 if (typeof window !== 'undefined') {
     window.CustomAnalyticsEventEmitter = CustomAnalyticsEventEmitter;
+    window.formabandonField = formabandonField;
     window.sendSearchResultClickInfo = sendSearchResultClickInfo;
     window.getInlinePageInfo = getInlinePageInfo;
     window.getSearchResultPageInfo = getSearchResultPageInfo;
