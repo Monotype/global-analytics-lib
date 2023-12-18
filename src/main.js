@@ -443,7 +443,7 @@ function getFormSuccessAnalytics(form, formName, formFields) {
 }
 
 // Trigger formAbandon event when user abandon the form
-function getFormAbandonAnalytics(form, formName, formFields, formabandonField) {
+function getFormAbandonAnalytics(form, formName, formFields) {
     let formAbandonEvent = {
         "event": "formAbandon",
         "form": {
@@ -482,7 +482,7 @@ document.addEventListener("visibilitychange", function () {
                 marketoForms.forEach(form => {
                     let formName = getFormName(form);
                     let formFields = form.querySelectorAll('.mktoField:not([type="hidden"])');
-                    getFormAbandonAnalytics(form, formName, formFields, formabandonField);
+                    getFormAbandonAnalytics(form, formName, formFields);
                 });
             } else {
                 let webforms = document.querySelectorAll('.webform-submission-form');
@@ -490,7 +490,7 @@ document.addEventListener("visibilitychange", function () {
                     let formName = form.previousElementSibling?.innerText;
                     // Get all input, select, textarea , checkbox and radio fields from the form
                     let formFields = form.querySelectorAll(".analytics-field");
-                    getFormAbandonAnalytics(form, formName, formFields, formabandonField);
+                    getFormAbandonAnalytics(form, formName, formFields);
                 });
             }
         }
