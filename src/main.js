@@ -110,7 +110,7 @@ function getUserInfo() {
         "guid": pageInfoObj.userInfo?.guid ?? '',
         "hasMultipleOrganization": pageInfoObj.userInfo?.hasMultipleOrganization ?? '',
         "associatedOrgCnt": pageInfoObj.userInfo?.associatedOrgCnt ?? '',
-        "userConsent": pageInfoObj.userInfo?.userConsent ?? (cookieConsent && cookieConsent.length > 0) ? 'optin' : 'optout',
+        "userConsent": pageInfoObj.userInfo?.userConsent ?? getUserCookieConsent(),
         "consentGroup": pageInfoObj.userInfo?.consentGroup ?? getCookieConsentGroupStatus(),
         "anonymisedID": pageInfoObj.userInfo?.anonymisedID ?? getAnonymousID(),
         "userStatus": pageInfoObj.userInfo?.userStatus ?? 'guest',
@@ -213,6 +213,19 @@ function getFormName(formEl) {
     } else if (formEl.parentElement.previousElementSibling?.classList.contains('marketo-main-title')) {
         return formEl.parentElement.previousElementSibling.innerText;
     } else return '';
+}
+
+function getUserCookieConsent() {
+    let userConsent = false;
+    if (cookieConsent && cookieConsent.length > 0) {
+        getCookieConsentGroup()?.split(',').forEach(item => {
+            let group = item.split(':');
+            if (group[0] != 'C0001' && group[1] == "1") {
+                userConsent = true;
+            }
+        });
+    }
+    return userConsent ? 'optin' : 'optout';
 }
 
 // Get cookie consent group from OptanonConsent cookie key from encoded string - used copilot to generate this function
@@ -376,7 +389,7 @@ function getIntercomAnalytics() {
             "event": "chatInitiate",
             "links": {
                 "linkCategory": "chat",
-                "linkSection": pageInfoObj.pageInfo?.pageSection,
+                "linkSection": pageInfoObj.pageInfo?.pageSection ?? getPageSection(),
                 "linkName": "chat open",
                 "linkType": "img"
             }
@@ -388,7 +401,7 @@ function getIntercomAnalytics() {
             "event": "chatClose",
             "links": {
                 "linkCategory": "chat",
-                "linkSection": pageInfoObj.pageInfo?.pageSection,
+                "linkSection": pageInfoObj.pageInfo?.pageSection ?? getPageSection(),
                 "linkName": "chat close",
                 "linkType": "img"
             }
