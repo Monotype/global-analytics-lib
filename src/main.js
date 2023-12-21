@@ -13,6 +13,8 @@ const pageInfoObj = typeof pageInfoGlobal != 'undefined' ? JSON.parse(JSON.strin
 // Identifier to check if a page has any custom pageLoad event
 const hasCustomPageLoad = pageInfoObj.hasCustomPageLoad ?? false;
 
+const vidName = pageInfoObj.pageInfo?.videoName ?? '';
+
 let formabandonField = '';
 
 const cookieConsent = document.cookie.split(';').filter((item) => item.trim().startsWith('OptanonConsent='));
@@ -530,12 +532,12 @@ if (typeof Vimeo === 'undefined' || typeof Vimeo.Player === 'undefined') {
     console.log('Load Vimeo Player library to track Vimeo videos - https://player.vimeo.com/api/player.js');
 } else {
     Array.from(iframes).map(iframe => {
-        if (iframe?.src?.includes("vimeo")) {
+        if (iframe?.src?.includes("vimeo") && !iframe?.src?.includes("autoplay")) {
             const player = new Vimeo.Player(iframe);
 
             let videoDuration;
 
-            let videoName = iframe.parentElement.dataset.analyticsVideoname ? iframe.parentElement.dataset.analyticsVideoname : pageInfoObj.pageInfo?.pageName;
+            let videoName = iframe.parentElement.dataset.analyticsVideoname ? iframe.parentElement.dataset.analyticsVideoname : vidName;
 
             player.getDuration().then(function (duration) {
                 videoDuration = duration;
@@ -578,13 +580,13 @@ const vids = document.querySelectorAll('video');
 
 Array.from(vids).map(vid => {
     let videoSource = vid.querySelector('source');
-    if (vid && videoSource.src && videoSource.src.includes("mp4")) {
+    if (vid && videoSource.src && videoSource.src.includes("mp4") && videoSource.autoplay === false && videoSource.loop === false) {
 
         vid.addEventListener('loadedmetadata', function () {
 
             let videoDuration = Math.floor(vid.duration);
 
-            let videoName = vid.dataset.analyticsVideoname ? vid.dataset.analyticsVideoname : pageInfoObj.pageInfo?.pageName;
+            let videoName = vid.dataset.analyticsVideoname ? vid.dataset.analyticsVideoname : vidName;
 
             vid.addEventListener('play', function () {
                 getVideoStartAnalytics(videoName, videoDuration);
