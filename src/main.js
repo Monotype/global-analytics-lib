@@ -532,7 +532,7 @@ if (typeof Vimeo === 'undefined' || typeof Vimeo.Player === 'undefined') {
     console.log('Load Vimeo Player library to track Vimeo videos - https://player.vimeo.com/api/player.js');
 } else {
     Array.from(iframes).map(iframe => {
-        if (iframe?.src?.includes("vimeo") && !iframe?.src?.includes("autoplay")) {
+        if (iframe?.src?.includes("vimeo") || !iframe?.src?.includes("autoplay=1")) {
             const player = new Vimeo.Player(iframe);
 
             let videoDuration;
