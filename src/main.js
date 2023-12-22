@@ -670,17 +670,16 @@ function getUrlParameter(attributeName) {
     let urlSearchParams = new URLSearchParams(url);
     return urlSearchParams.get(attributeName);
 }
+
 function sendSearchResultClickInfo(searchType, fontDetail) {
     console.log(fontDetail);
     const eventData = fontDetail.data.eventData;
     let serachObj = {};
     let event = "searchResultClick";
-    let eventInfo = "searchResultPage";
     if (searchType == "inline") {
         serachObj = {
             "searchType": searchType,
             "inlineSearchTerm": eventData.inlineSearchTerm,
-            "inlineSearchType": eventData.inlineSearchType,
             "inlineSearchResultTerm": eventData.inlineSearchResultTerm,
             "inlineSearchResultClicked": fontDetail.data.title,
             "inlineSearchResultClickPos": eventData.positions[0].toString(),
@@ -690,7 +689,7 @@ function sendSearchResultClickInfo(searchType, fontDetail) {
         event = "wtfSearchResultClick";
         serachObj = {
             "searchType": searchType,
-            "wtfSearchType": eventData.inlineSearchType,
+            "wtfSearchType": "",
             "wtfSearchResultClicked": fontDetail.data.title,
             "wtfSearchResultPage": getUrlParameter("page") ? getUrlParameter("page") : "1",
             "wtfSearchResultClickPos": eventData.positions[0].toString(),
@@ -698,7 +697,6 @@ function sendSearchResultClickInfo(searchType, fontDetail) {
     }
     window.adobeDataLayer.push({
         "event": event,
-        "eventInfo": eventInfo,
         "search": serachObj,
         "font": {
             "fontID": fontDetail.data.family_id,
@@ -719,7 +717,7 @@ function getInlinePageInfo(event, searchObj) {
         inlineSearchType: searchObj.searchTabName,
         inlineSearchCategory: searchObj.searchCategory,
         inlineSearchCatVal: searchObj.searchCategoryValue,
-        inlineSearchSuggestClickedPosition: searchObj.searchSuggestClickedPos,
+        inlineSearchSuggestClickedPosition: searchObj.searchSuggestClickedPos.toString(),
 
     }
     console.log("final search data : ", searchData);
