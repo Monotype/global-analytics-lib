@@ -532,7 +532,7 @@ if (typeof Vimeo === 'undefined' || typeof Vimeo.Player === 'undefined') {
     console.log('Load Vimeo Player library to track Vimeo videos - https://player.vimeo.com/api/player.js');
 } else {
     Array.from(iframes).map(iframe => {
-        if (iframe?.src?.includes("vimeo") || !iframe?.src?.includes("autoplay=1")) {
+        if (iframe?.src?.includes("vimeo")) {
             const player = new Vimeo.Player(iframe);
 
             let videoDuration;
@@ -580,7 +580,9 @@ const vids = document.querySelectorAll('video');
 
 Array.from(vids).map(vid => {
     let videoSource = vid.querySelector('source');
-    if (vid && videoSource.src && videoSource.src.includes("mp4") && videoSource.autoplay === false && videoSource.loop === false) {
+    const isAutoplay = vid.autoplay;
+    const isLooping = vid.loop;
+    if (vid && videoSource.src && videoSource.src.includes("mp4") && !isAutoplay && !isLooping) {
 
         vid.addEventListener('loadedmetadata', function () {
 
