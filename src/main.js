@@ -261,7 +261,7 @@ function getUserCookieConsent(cookie) {
 // Get cookie consent group from OptanonConsent cookie key from encoded string - used copilot to generate this function
 function getCookieConsentGroup(cookie) {
     let cookieConsentGroup = "";
-    if (cookieConsent.length) {
+    if (cookie.length) {
         cookieConsentGroup = decodeURIComponent(cookie[0]).split('&').filter((item) => item.trim().startsWith('groups='))[0].split('=')[1];
     }
     return cookieConsentGroup;
