@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
     delete pageInfoObj.hasCustomPageLoad;
     if (!hasCustomPageLoad) {
         if (cookieConsent && cookieConsent.length > 0) {
-            getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad', userConsent);
+            getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad');
         } else {
             checkCookieAndPushPageLoadEvent();
         }
