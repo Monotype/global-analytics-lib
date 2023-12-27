@@ -13,6 +13,8 @@ const pageInfoObj = typeof pageInfoGlobal != 'undefined' ? JSON.parse(JSON.strin
 // Identifier to check if a page has any custom pageLoad event
 const hasCustomPageLoad = pageInfoObj.hasCustomPageLoad ?? false;
 
+const vidName = pageInfoObj.pageInfo?.videoName ?? '';
+
 let formabandonField = '';
 
 const cookieConsent = document.cookie.split(';').filter((item) => item.trim().startsWith('OptanonConsent='));
@@ -155,13 +157,16 @@ function getLazyLoadedElements(elements) {
 
 function getPageSection() {
     let pathname = window.location.pathname;
-    if (typeof Drupal !== 'undefined') {
+    let pageSection = function checkForFontKeyword(param, n) {
+        return param == 'font' ? pathname.split('/')[n + 1] : pathname.split('/')[n];
+    }
+    if (typeof Drupal !== 'undefined' && window.location.origin.includes('monotype.')) {
         return (pathname.split('/')[1] == Drupal.currentLanguage) ? pathname.split('/')[2] : pathname.split('/')[1];
     }
     if (pathname.split('/')[1] == document.documentElement.lang) {
-        return (pathname.split('/')[2] == 'a') ? pathname.split('/')[3] : pathname.split('/')[2];
+        return (pathname.split('/')[2] == 'a') ? pageSection(pathname.split('/')[3], 3) : pathname.split('/')[2];
     }
-    return (pathname.split('/')[1] == 'a') ? pathname.split('/')[2] : pathname.split('/')[1];
+    return (pathname.split('/')[1] == 'a') ? pageSection(pathname.split('/')[2], 2) : pathname.split('/')[1];
 }
 
 if (typeof MktoForms2 === 'undefined') {
@@ -389,7 +394,7 @@ function getIntercomAnalytics() {
             "event": "chatInitiate",
             "links": {
                 "linkCategory": "chat",
-                "linkSection": pageInfoObj.pageInfo?.pageSection ?? getPageSection(),
+                "linkSection": !pageInfoObj.pageInfo?.pageSection ? getPageSection() : pageInfoObj.pageInfo?.pageSection,
                 "linkName": "chat open",
                 "linkType": "img"
             }
@@ -401,7 +406,7 @@ function getIntercomAnalytics() {
             "event": "chatClose",
             "links": {
                 "linkCategory": "chat",
-                "linkSection": pageInfoObj.pageInfo?.pageSection ?? getPageSection(),
+                "linkSection": !pageInfoObj.pageInfo?.pageSection ? getPageSection() : pageInfoObj.pageInfo?.pageSection,
                 "linkName": "chat close",
                 "linkType": "img"
             }
@@ -535,7 +540,7 @@ if (typeof Vimeo === 'undefined' || typeof Vimeo.Player === 'undefined') {
 
             let videoDuration;
 
-            let videoName = iframe.parentElement.dataset.analyticsVideoname ? iframe.parentElement.dataset.analyticsVideoname : pageInfoObj.pageInfo?.pageName;
+            let videoName = iframe.parentElement.dataset.analyticsVideoname ? iframe.parentElement.dataset.analyticsVideoname : vidName;
 
             player.getDuration().then(function (duration) {
                 videoDuration = duration;
@@ -578,13 +583,15 @@ const vids = document.querySelectorAll('video');
 
 Array.from(vids).map(vid => {
     let videoSource = vid.querySelector('source');
-    if (vid && videoSource.src && videoSource.src.includes("mp4")) {
+    const isAutoplay = vid.autoplay;
+    const isLooping = vid.loop;
+    if (vid && videoSource.src && videoSource.src.includes("mp4") && !isAutoplay && !isLooping) {
 
         vid.addEventListener('loadedmetadata', function () {
 
             let videoDuration = Math.floor(vid.duration);
 
-            let videoName = vid.dataset.analyticsVideoname ? vid.dataset.analyticsVideoname : pageInfoObj.pageInfo?.pageName;
+            let videoName = vid.dataset.analyticsVideoname ? vid.dataset.analyticsVideoname : vidName;
 
             vid.addEventListener('play', function () {
                 getVideoStartAnalytics(videoName, videoDuration);
@@ -668,17 +675,16 @@ function getUrlParameter(attributeName) {
     let urlSearchParams = new URLSearchParams(url);
     return urlSearchParams.get(attributeName);
 }
+
 function sendSearchResultClickInfo(searchType, fontDetail) {
     console.log(fontDetail);
     const eventData = fontDetail.data.eventData;
     let serachObj = {};
     let event = "searchResultClick";
-    let eventInfo = "searchResultPage";
     if (searchType == "inline") {
         serachObj = {
             "searchType": searchType,
             "inlineSearchTerm": eventData.inlineSearchTerm,
-            "inlineSearchType": eventData.inlineSearchType,
             "inlineSearchResultTerm": eventData.inlineSearchResultTerm,
             "inlineSearchResultClicked": fontDetail.data.title,
             "inlineSearchResultClickPos": eventData.positions[0].toString(),
@@ -688,7 +694,7 @@ function sendSearchResultClickInfo(searchType, fontDetail) {
         event = "wtfSearchResultClick";
         serachObj = {
             "searchType": searchType,
-            "wtfSearchType": eventData.inlineSearchType,
+            "wtfSearchType": "",
             "wtfSearchResultClicked": fontDetail.data.title,
             "wtfSearchResultPage": getUrlParameter("page") ? getUrlParameter("page") : "1",
             "wtfSearchResultClickPos": eventData.positions[0].toString(),
@@ -696,7 +702,6 @@ function sendSearchResultClickInfo(searchType, fontDetail) {
     }
     window.adobeDataLayer.push({
         "event": event,
-        "eventInfo": eventInfo,
         "search": serachObj,
         "font": {
             "fontID": fontDetail.data.family_id,
@@ -717,7 +722,7 @@ function getInlinePageInfo(event, searchObj) {
         inlineSearchType: searchObj.searchTabName,
         inlineSearchCategory: searchObj.searchCategory,
         inlineSearchCatVal: searchObj.searchCategoryValue,
-        inlineSearchSuggestClickedPosition: searchObj.searchSuggestClickedPos,
+        inlineSearchSuggestClickedPosition: searchObj.searchSuggestClickedPos.toString(),
 
     }
     console.log("final search data : ", searchData);
@@ -731,8 +736,8 @@ function getSearchResultPageInfo(event, eventInfo, findingMethod, searchObj) {
         searchData.eventInfo = "searchResult"
         searchData.search = {
             "searchType": searchObj.searchType,
-            "inlineSearchTerm": searchObj.searchTerm,
-            "inlineSearchType": searchObj.inlineSearchType,
+            "inlineSearchTerm": pageInfoGlobal.pageInfo.inlineSearchTerm ? pageInfoGlobal.pageInfo.inlineSearchTerm : searchObj.searchTerm,
+            "inlineSearchResultTerm": pageInfoGlobal.pageInfo.inlineSearchResultTerm ? pageInfoGlobal.pageInfo.inlineSearchResultTerm : searchObj.searchTerm,
             "inlineSearchResultCount": searchObj.searchResultCount.toString()
         }
     }
