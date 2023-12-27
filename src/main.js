@@ -394,7 +394,7 @@ function getIntercomAnalytics() {
             "event": "chatInitiate",
             "links": {
                 "linkCategory": "chat",
-                "linkSection": pageInfoObj.pageInfo?.pageSection ?? getPageSection(),
+                "linkSection": !pageInfoObj.pageInfo?.pageSection ? getPageSection() : pageInfoObj.pageInfo?.pageSection,
                 "linkName": "chat open",
                 "linkType": "img"
             }
@@ -406,7 +406,7 @@ function getIntercomAnalytics() {
             "event": "chatClose",
             "links": {
                 "linkCategory": "chat",
-                "linkSection": pageInfoObj.pageInfo?.pageSection ?? getPageSection(),
+                "linkSection": !pageInfoObj.pageInfo?.pageSection ? getPageSection() : pageInfoObj.pageInfo?.pageSection,
                 "linkName": "chat close",
                 "linkType": "img"
             }
