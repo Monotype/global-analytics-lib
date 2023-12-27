@@ -248,7 +248,7 @@ function getFormName(formEl) {
 function getUserCookieConsent(cookie) {
     let userConsent = false;
     if (cookie && cookie.length > 0) {
-        getCookieConsentGroup()?.split(',').forEach(item => {
+        getCookieConsentGroup(cookie)?.split(',').forEach(item => {
             let group = item.split(':');
             if (group[0] != 'C0001' && group[1] == "1") {
                 userConsent = true;
@@ -259,17 +259,17 @@ function getUserCookieConsent(cookie) {
 }
 
 // Get cookie consent group from OptanonConsent cookie key from encoded string - used copilot to generate this function
-function getCookieConsentGroup() {
+function getCookieConsentGroup(cookie) {
     let cookieConsentGroup = "";
     if (cookieConsent.length) {
-        cookieConsentGroup = decodeURIComponent(cookieConsent[0]).split('&').filter((item) => item.trim().startsWith('groups='))[0].split('=')[1];
+        cookieConsentGroup = decodeURIComponent(cookie[0]).split('&').filter((item) => item.trim().startsWith('groups='))[0].split('=')[1];
     }
     return cookieConsentGroup;
 }
 
 // Get cookie consent group status based on mapping - used copilot to generate this function
 function getCookieConsentGroupStatus() {
-    let cookieConsentGroup = getCookieConsentGroup();
+    let cookieConsentGroup = getCookieConsentGroup(cookieConsent);
     const cookieConsentGroupMapping = {
         "C0001": "necessary",
         "C0002": "performance",
