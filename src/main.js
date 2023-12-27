@@ -249,7 +249,7 @@ function getUserCookieConsent(cookie) {
     if (cookie && cookie.length > 0) {
         getCookieConsentGroup(cookie)?.split(',').forEach(item => {
             let group = item.split(':');
-            if (group[0] != 'C0001' && group[1] == "1") {
+            if (group[0] == 'C0002' && group[1] == "1") {
                 userConsent = true;
             }
         });
