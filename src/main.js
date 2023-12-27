@@ -157,13 +157,16 @@ function getLazyLoadedElements(elements) {
 
 function getPageSection() {
     let pathname = window.location.pathname;
-    if (typeof Drupal !== 'undefined') {
+    let pageSection = function checkForFontKeyword(param, n) {
+        return param == 'font' ? pathname.split('/')[n + 1] : pathname.split('/')[n];
+    }
+    if (typeof Drupal !== 'undefined' && window.location.origin.includes('monotype.')) {
         return (pathname.split('/')[1] == Drupal.currentLanguage) ? pathname.split('/')[2] : pathname.split('/')[1];
     }
     if (pathname.split('/')[1] == document.documentElement.lang) {
-        return (pathname.split('/')[2] == 'a') ? pathname.split('/')[3] : pathname.split('/')[2];
+        return (pathname.split('/')[2] == 'a') ? pageSection(pathname.split('/')[3], 3) : pathname.split('/')[2];
     }
-    return (pathname.split('/')[1] == 'a') ? pathname.split('/')[2] : pathname.split('/')[1];
+    return (pathname.split('/')[1] == 'a') ? pageSection(pathname.split('/')[2], 2) : pathname.split('/')[1];
 }
 
 if (typeof MktoForms2 === 'undefined') {
@@ -733,8 +736,8 @@ function getSearchResultPageInfo(event, eventInfo, findingMethod, searchObj) {
         searchData.eventInfo = "searchResult"
         searchData.search = {
             "searchType": searchObj.searchType,
-            "inlineSearchTerm": searchObj.searchTerm,
-            "inlineSearchType": searchObj.inlineSearchType,
+            "inlineSearchTerm": pageInfoGlobal.pageInfo.inlineSearchTerm ? pageInfoGlobal.pageInfo.inlineSearchTerm : searchObj.searchTerm,
+            "inlineSearchResultTerm": pageInfoGlobal.pageInfo.inlineSearchResultTerm ? pageInfoGlobal.pageInfo.inlineSearchResultTerm : searchObj.searchTerm,
             "inlineSearchResultCount": searchObj.searchResultCount.toString()
         }
     }
