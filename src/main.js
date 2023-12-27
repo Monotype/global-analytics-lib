@@ -48,12 +48,12 @@ const linkClickAttributes = {
 const anonymousIDLife = 15; // 15 minutes
 
 // Push pageInfo to adobeDataLayer
-function getDataLayerInfo(eventName, eventInfo, userConsent) {
+function getDataLayerInfo(eventName, eventInfo, userConsent, cookie) {
     let pageLoadData = {
         "event": eventName,
         "eventInfo": eventInfo,
         "pageInfo": getPageInfo(),
-        "userInfo": getUserInfo(userConsent),
+        "userInfo": getUserInfo(userConsent, cookie),
         "userOrganization": getUserOrganization(),
         "pageError": getPageErrorInfo()
     };
@@ -102,7 +102,7 @@ function getPageErrorInfo() {
 }
 
 // Get user info 
-function getUserInfo(userConsent) {
+function getUserInfo(userConsent, cookie) {
     return {
         "encryptedUserEmail": pageInfoObj.userInfo?.encryptedUserEmail ?? '',
         "userRole": pageInfoObj.userInfo?.userRole ?? '',
@@ -113,7 +113,7 @@ function getUserInfo(userConsent) {
         "hasMultipleOrganization": pageInfoObj.userInfo?.hasMultipleOrganization ?? '',
         "associatedOrgCnt": pageInfoObj.userInfo?.associatedOrgCnt ?? '',
         "userConsent": userConsent ?? getUserCookieConsent(cookieConsent),
-        "consentGroup": pageInfoObj.userInfo?.consentGroup ?? getCookieConsentGroupStatus(),
+        "consentGroup": pageInfoObj.userInfo?.consentGroup ?? getCookieConsentGroupStatus(cookie ?? cookieConsent),
         "anonymisedID": pageInfoObj.userInfo?.anonymisedID ?? getAnonymousID(),
         "userStatus": pageInfoObj.userInfo?.userStatus ?? 'guest',
         "Auth0Id": pageInfoObj.userInfo?.Auth0Id ?? '',
@@ -148,16 +148,15 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function checkCookieAndPushPageLoadEvent() {
-    let maxInterval = 10000; // 5 seconds in milliseconds
+    let maxInterval = 5000; // 5 seconds in milliseconds
     let elapsedTime = 0;
     let intervalId;
-    console.log("checkCookieAndPushPageLoadEvent entered");
     function performCheck() {
         let oneTrustCookie = document.cookie.split(';').filter((item) => item.trim().startsWith('OptanonConsent='));
         if ((oneTrustCookie && oneTrustCookie.length > 0) || (elapsedTime >= maxInterval)) {
             // Condition met, call getDataLayerInfo and clear the interval
             let userConsent = getUserCookieConsent(oneTrustCookie);
-            getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad', userConsent);
+            getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad', userConsent, oneTrustCookie);
             clearInterval(intervalId);
             console.log("Page load event pushed");
         }
@@ -268,8 +267,8 @@ function getCookieConsentGroup(cookie) {
 }
 
 // Get cookie consent group status based on mapping - used copilot to generate this function
-function getCookieConsentGroupStatus() {
-    let cookieConsentGroup = getCookieConsentGroup(cookieConsent);
+function getCookieConsentGroupStatus(cookie) {
+    let cookieConsentGroup = getCookieConsentGroup(cookie);
     const cookieConsentGroupMapping = {
         "C0001": "necessary",
         "C0002": "performance",
