@@ -126,7 +126,11 @@ document.addEventListener('DOMContentLoaded', () => {
     delete pageInfoObj.lazyLoadIdentifier;
     delete pageInfoObj.hasCustomPageLoad;
     if (!hasCustomPageLoad) {
-        getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad');
+        if (cookieConsent && cookieConsent.length > 0) {
+            getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad');
+        } else {
+            checkCookieAndPushPageLoadEvent();
+        }
     }
     getAnalyticsOnLinkClicks();
     document.addEventListener('click', function (event) {
@@ -142,6 +146,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     getLazyLoadedElements(lazyLoadElements);
 });
+
+function checkCookieAndPushPageLoadEvent() {
+    let maxInterval = 10000; // 5 seconds in milliseconds
+    let elapsedTime = 0;
+    let intervalId;
+
+    function performCheck() {
+        let oneTrustCookie = document.cookie.split(';').filter((item) => item.trim().startsWith('OptanonConsent='));
+        if ((oneTrustCookie && oneTrustCookie.length > 0) || (elapsedTime >= maxInterval)) {
+            // Condition met, call getDataLayerInfo and clear the interval
+            getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad');
+            clearInterval(intervalId);
+            console.log("Page load event pushed");
+        }
+        elapsedTime += 1000; // Increment elapsed time by 1 second
+    }
+
+    // Set up the interval for continuous checking
+    intervalId = setInterval(performCheck, 1000); // Check every second (adjust as needed)
+}
 
 function getLazyLoadedElements(elements) {
     elements?.forEach(element => {
