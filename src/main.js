@@ -48,12 +48,12 @@ const linkClickAttributes = {
 const anonymousIDLife = 15; // 15 minutes
 
 // Push pageInfo to adobeDataLayer
-function getDataLayerInfo(eventName, eventInfo) {
+function getDataLayerInfo(eventName, eventInfo, userConsent) {
     let pageLoadData = {
         "event": eventName,
         "eventInfo": eventInfo,
         "pageInfo": getPageInfo(),
-        "userInfo": getUserInfo(),
+        "userInfo": getUserInfo(userConsent),
         "userOrganization": getUserOrganization(),
         "pageError": getPageErrorInfo()
     };
@@ -102,7 +102,7 @@ function getPageErrorInfo() {
 }
 
 // Get user info 
-function getUserInfo() {
+function getUserInfo(userConsent) {
     return {
         "encryptedUserEmail": pageInfoObj.userInfo?.encryptedUserEmail ?? '',
         "userRole": pageInfoObj.userInfo?.userRole ?? '',
@@ -112,7 +112,7 @@ function getUserInfo() {
         "guid": pageInfoObj.userInfo?.guid ?? '',
         "hasMultipleOrganization": pageInfoObj.userInfo?.hasMultipleOrganization ?? '',
         "associatedOrgCnt": pageInfoObj.userInfo?.associatedOrgCnt ?? '',
-        "userConsent": pageInfoObj.userInfo?.userConsent ?? getUserCookieConsent(),
+        "userConsent": userConsent ?? getUserCookieConsent(cookieConsent),
         "consentGroup": pageInfoObj.userInfo?.consentGroup ?? getCookieConsentGroupStatus(),
         "anonymisedID": pageInfoObj.userInfo?.anonymisedID ?? getAnonymousID(),
         "userStatus": pageInfoObj.userInfo?.userStatus ?? 'guest',
@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
     delete pageInfoObj.hasCustomPageLoad;
     if (!hasCustomPageLoad) {
         if (cookieConsent && cookieConsent.length > 0) {
-            getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad');
+            getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad', userConsent);
         } else {
             checkCookieAndPushPageLoadEvent();
         }
@@ -151,12 +151,13 @@ function checkCookieAndPushPageLoadEvent() {
     let maxInterval = 10000; // 5 seconds in milliseconds
     let elapsedTime = 0;
     let intervalId;
-
+    console.log("checkCookieAndPushPageLoadEvent entered");
     function performCheck() {
         let oneTrustCookie = document.cookie.split(';').filter((item) => item.trim().startsWith('OptanonConsent='));
         if ((oneTrustCookie && oneTrustCookie.length > 0) || (elapsedTime >= maxInterval)) {
             // Condition met, call getDataLayerInfo and clear the interval
-            getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad');
+            let userConsent = getUserCookieConsent(oneTrustCookie);
+            getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad', userConsent);
             clearInterval(intervalId);
             console.log("Page load event pushed");
         }
@@ -244,9 +245,9 @@ function getFormName(formEl) {
     } else return '';
 }
 
-function getUserCookieConsent() {
+function getUserCookieConsent(cookie) {
     let userConsent = false;
-    if (cookieConsent && cookieConsent.length > 0) {
+    if (cookie && cookie.length > 0) {
         getCookieConsentGroup()?.split(',').forEach(item => {
             let group = item.split(':');
             if (group[0] != 'C0001' && group[1] == "1") {
