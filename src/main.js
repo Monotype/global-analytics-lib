@@ -171,9 +171,10 @@ function getLazyLoadedElements(elements) {
     elements?.forEach(element => {
         document.querySelector(element)?.addEventListener('click', function (event) {
             if (element == '.mt-load-more-elements-wrapper') {
-                getResourceTileElement();
-            } else {
-                getAnalyticsOnLinkClicks(true);
+                hasParentWithAnalyticsAttribute(event.target) && getResourceTileElement(event, hasParentWithAnalyticsAttribute(event.target));
+                if (!event.target.dataset.analyticsLinkEventAttached) {
+                    getAnalyticsOnLinkClicks(true, event.target);
+                }
             }
         }, true);
     })
@@ -334,21 +335,30 @@ function getAllTargetElements() {
 }
 
 // Get analytics data on link clicks - used copilot to generate this function
-function getAnalyticsOnLinkClicks(stopPropagation) {
-    getAllTargetElements()?.forEach(el => {
-        el.addEventListener("click", (event) => {
-            stopPropagation && event.stopImmediatePropagation();
-            if (!el.dataset.analyticsIscustomevent) {
-                let dataAttributes = Object.keys(el.dataset).filter(key => key.startsWith("analytics"));
-                let linkClickData = {};
-                createLinkClickData(el, linkClickData, dataAttributes);
-                // check if linkclickdata has any values then push to dataLayer
-                if (Object.keys(linkClickData).length) {
-                    pushLinkClickEvent(linkClickData, el.dataset['analyticsEvent'] ?? 'linkClick');
-                }
+function getAnalyticsOnLinkClicks(stopPropagation, targetEl) {
+    if (stopPropagation) {
+        attachLinkClickToElement(targetEl, stopPropagation);
+    } else {
+        getAllTargetElements()?.forEach(el => {
+            el.dataset.analyticsLinkEventAttached = true;
+            attachLinkClickToElement(el, stopPropagation)
+        })
+    }
+}
+
+function attachLinkClickToElement(el, stopPropagation) {
+    el.addEventListener("click", (event) => {
+        stopPropagation && event.stopImmediatePropagation();
+        if (!el.dataset.analyticsIscustomevent) {
+            let dataAttributes = Object.keys(el.dataset).filter(key => key.startsWith("analytics"));
+            let linkClickData = {};
+            createLinkClickData(el, linkClickData, dataAttributes);
+            // check if linkclickdata has any values then push to dataLayer
+            if (Object.keys(linkClickData).length) {
+                pushLinkClickEvent(linkClickData, el.dataset['analyticsEvent'] ?? 'linkClick');
             }
-        });
-    })
+        }
+    });
 }
 
 function createLinkClickData(el, linkClickData, dataAttributes) {
@@ -823,20 +833,30 @@ function getSearchTypeTesterData(typeTesterData) {
 }
 
 // Add click event to Resource listing image and title
-function getResourceTileElement() {
-    document.querySelectorAll('.component-main-wrapper').forEach(element => {
-        // check if element has any data attributes starting with analytics
-        if (Object.keys(element.dataset).some(key => key.startsWith('analytics'))) {
-            element.addEventListener('click', (event) => {
-                event.stopImmediatePropagation();
-                let linkType = event.target.tagName == 'IMG' ? 'image' : 'text';
-                let isLinkorImgElement = event.target.parentElement.classList.contains('component-title') || event.target.tagName == 'IMG';
-                if (event.target.dataset && isLinkorImgElement) {
-                    pushResourceClickEventData(element, linkType);
-                }
-            });
+function getResourceTileElement(event, parentEl) {
+    event.stopImmediatePropagation();
+    let linkType = event.target.tagName == 'IMG' ? 'image' : 'text';
+    let isLinkorImgElement = event.target.parentElement.classList.contains('component-title') || event.target.tagName == 'IMG';
+    if (isLinkorImgElement) {
+        pushResourceClickEventData(parentEl, linkType);
+    } else if (hasParentWithAnalyticsAttribute(event.target)) {
+        pushResourceClickEventData(event.target, 'button')
+    }
+}
+
+// Function to check if any parent element has a data attribute starting with "analytics-"
+function hasParentWithAnalyticsAttribute(element) {
+    if (!element?.attributes) return false;
+
+    // Check if the current element has a data attribute starting with "analytics-"
+    for (const attribute of element.attributes) {
+        const attributeName = attribute.name;
+        if (attributeName.startsWith('data-analytics-')) {
+            return element;
         }
-    });
+    }
+    // Recursively check the parent elements
+    return hasParentWithAnalyticsAttribute(element.parentNode);
 }
 
 // Push resource link click event to data layer
