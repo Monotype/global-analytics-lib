@@ -48,12 +48,12 @@ const linkClickAttributes = {
 const anonymousIDLife = 15; // 15 minutes
 
 // Push pageInfo to adobeDataLayer
-function getDataLayerInfo(eventName, eventInfo) {
+function getDataLayerInfo(eventName, eventInfo, userConsent, cookie) {
     let pageLoadData = {
         "event": eventName,
         "eventInfo": eventInfo,
         "pageInfo": getPageInfo(),
-        "userInfo": getUserInfo(),
+        "userInfo": getUserInfo(userConsent, cookie),
         "userOrganization": getUserOrganization(),
         "pageError": getPageErrorInfo()
     };
@@ -102,7 +102,7 @@ function getPageErrorInfo() {
 }
 
 // Get user info 
-function getUserInfo() {
+function getUserInfo(userConsent, cookie) {
     return {
         "encryptedUserEmail": pageInfoObj.userInfo?.encryptedUserEmail ?? '',
         "userRole": pageInfoObj.userInfo?.userRole ?? '',
@@ -112,8 +112,8 @@ function getUserInfo() {
         "guid": pageInfoObj.userInfo?.guid ?? '',
         "hasMultipleOrganization": pageInfoObj.userInfo?.hasMultipleOrganization ?? '',
         "associatedOrgCnt": pageInfoObj.userInfo?.associatedOrgCnt ?? '',
-        "userConsent": pageInfoObj.userInfo?.userConsent ?? getUserCookieConsent(),
-        "consentGroup": pageInfoObj.userInfo?.consentGroup ?? getCookieConsentGroupStatus(),
+        "userConsent": userConsent ?? getUserCookieConsent(cookieConsent),
+        "consentGroup": pageInfoObj.userInfo?.consentGroup ?? getCookieConsentGroupStatus(cookie ?? cookieConsent),
         "anonymisedID": pageInfoObj.userInfo?.anonymisedID ?? getAnonymousID(),
         "userStatus": pageInfoObj.userInfo?.userStatus ?? 'guest',
         "Auth0Id": pageInfoObj.userInfo?.Auth0Id ?? '',
@@ -126,7 +126,11 @@ document.addEventListener('DOMContentLoaded', () => {
     delete pageInfoObj.lazyLoadIdentifier;
     delete pageInfoObj.hasCustomPageLoad;
     if (!hasCustomPageLoad) {
-        getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad');
+        if (cookieConsent && cookieConsent.length > 0) {
+            getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad');
+        } else {
+            checkCookieAndPushPageLoadEvent();
+        }
     }
     getAnalyticsOnLinkClicks();
     document.addEventListener('click', function (event) {
@@ -143,13 +147,34 @@ document.addEventListener('DOMContentLoaded', () => {
     getLazyLoadedElements(lazyLoadElements);
 });
 
+function checkCookieAndPushPageLoadEvent() {
+    let maxInterval = 5000; // 5 seconds in milliseconds
+    let elapsedTime = 0;
+    let intervalId;
+    function performCheck() {
+        let oneTrustCookie = document.cookie.split(';').filter((item) => item.trim().startsWith('OptanonConsent='));
+        if ((oneTrustCookie && oneTrustCookie.length > 0) || (elapsedTime >= maxInterval)) {
+            // Condition met, call getDataLayerInfo and clear the interval
+            let userConsent = getUserCookieConsent(oneTrustCookie);
+            getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad', userConsent, oneTrustCookie);
+            clearInterval(intervalId);
+            console.log("Page load event pushed");
+        }
+        elapsedTime += 1000; // Increment elapsed time by 1 second
+    }
+
+    // Set up the interval for continuous checking
+    intervalId = setInterval(performCheck, 1000); // Check every second (adjust as needed)
+}
+
 function getLazyLoadedElements(elements) {
     elements?.forEach(element => {
         document.querySelector(element)?.addEventListener('click', function (event) {
             if (element == '.mt-load-more-elements-wrapper') {
-                getResourceTileElement();
-            } else {
-                getAnalyticsOnLinkClicks(true);
+                hasParentWithAnalyticsAttribute(event.target) && getResourceTileElement(event, hasParentWithAnalyticsAttribute(event.target));
+                if (!event.target.dataset.analyticsLinkEventAttached) {
+                    getAnalyticsOnLinkClicks(true, event.target);
+                }
             }
         }, true);
     })
@@ -220,12 +245,12 @@ function getFormName(formEl) {
     } else return '';
 }
 
-function getUserCookieConsent() {
+function getUserCookieConsent(cookie) {
     let userConsent = false;
-    if (cookieConsent && cookieConsent.length > 0) {
-        getCookieConsentGroup()?.split(',').forEach(item => {
+    if (cookie && cookie.length > 0) {
+        getCookieConsentGroup(cookie)?.split(',').forEach(item => {
             let group = item.split(':');
-            if (group[0] != 'C0001' && group[1] == "1") {
+            if (group[0] == 'C0002' && group[1] == "1") {
                 userConsent = true;
             }
         });
@@ -234,17 +259,17 @@ function getUserCookieConsent() {
 }
 
 // Get cookie consent group from OptanonConsent cookie key from encoded string - used copilot to generate this function
-function getCookieConsentGroup() {
+function getCookieConsentGroup(cookie) {
     let cookieConsentGroup = "";
-    if (cookieConsent.length) {
-        cookieConsentGroup = decodeURIComponent(cookieConsent[0]).split('&').filter((item) => item.trim().startsWith('groups='))[0].split('=')[1];
+    if (cookie.length) {
+        cookieConsentGroup = decodeURIComponent(cookie[0]).split('&').filter((item) => item.trim().startsWith('groups='))[0].split('=')[1];
     }
     return cookieConsentGroup;
 }
 
 // Get cookie consent group status based on mapping - used copilot to generate this function
-function getCookieConsentGroupStatus() {
-    let cookieConsentGroup = getCookieConsentGroup();
+function getCookieConsentGroupStatus(cookie) {
+    let cookieConsentGroup = getCookieConsentGroup(cookie);
     const cookieConsentGroupMapping = {
         "C0001": "necessary",
         "C0002": "performance",
@@ -310,21 +335,30 @@ function getAllTargetElements() {
 }
 
 // Get analytics data on link clicks - used copilot to generate this function
-function getAnalyticsOnLinkClicks(stopPropagation) {
-    getAllTargetElements()?.forEach(el => {
-        el.addEventListener("click", (event) => {
-            stopPropagation && event.stopImmediatePropagation();
-            if (!el.dataset.analyticsIscustomevent) {
-                let dataAttributes = Object.keys(el.dataset).filter(key => key.startsWith("analytics"));
-                let linkClickData = {};
-                createLinkClickData(el, linkClickData, dataAttributes);
-                // check if linkclickdata has any values then push to dataLayer
-                if (Object.keys(linkClickData).length) {
-                    pushLinkClickEvent(linkClickData, el.dataset['analyticsEvent'] ?? 'linkClick');
-                }
+function getAnalyticsOnLinkClicks(stopPropagation, targetEl) {
+    if (stopPropagation) {
+        attachLinkClickToElement(targetEl, stopPropagation);
+    } else {
+        getAllTargetElements()?.forEach(el => {
+            el.dataset.analyticsLinkEventAttached = true;
+            attachLinkClickToElement(el, stopPropagation)
+        })
+    }
+}
+
+function attachLinkClickToElement(el, stopPropagation) {
+    el.addEventListener("click", (event) => {
+        stopPropagation && event.stopImmediatePropagation();
+        if (!el.dataset.analyticsIscustomevent) {
+            let dataAttributes = Object.keys(el.dataset).filter(key => key.startsWith("analytics"));
+            let linkClickData = {};
+            createLinkClickData(el, linkClickData, dataAttributes);
+            // check if linkclickdata has any values then push to dataLayer
+            if (Object.keys(linkClickData).length) {
+                pushLinkClickEvent(linkClickData, el.dataset['analyticsEvent'] ?? 'linkClick');
             }
-        });
-    })
+        }
+    });
 }
 
 function createLinkClickData(el, linkClickData, dataAttributes) {
@@ -799,20 +833,30 @@ function getSearchTypeTesterData(typeTesterData) {
 }
 
 // Add click event to Resource listing image and title
-function getResourceTileElement() {
-    document.querySelectorAll('.component-main-wrapper').forEach(element => {
-        // check if element has any data attributes starting with analytics
-        if (Object.keys(element.dataset).some(key => key.startsWith('analytics'))) {
-            element.addEventListener('click', (event) => {
-                event.stopImmediatePropagation();
-                let linkType = event.target.tagName == 'IMG' ? 'image' : 'text';
-                let isLinkorImgElement = event.target.parentElement.classList.contains('component-title') || event.target.tagName == 'IMG';
-                if (event.target.dataset && isLinkorImgElement) {
-                    pushResourceClickEventData(element, linkType);
-                }
-            });
+function getResourceTileElement(event, parentEl) {
+    event.stopImmediatePropagation();
+    let linkType = event.target.tagName == 'IMG' ? 'image' : 'text';
+    let isLinkorImgElement = event.target.parentElement.classList.contains('component-title') || event.target.tagName == 'IMG';
+    if (isLinkorImgElement) {
+        pushResourceClickEventData(parentEl, linkType);
+    } else if (hasParentWithAnalyticsAttribute(event.target)) {
+        pushResourceClickEventData(event.target, 'button')
+    }
+}
+
+// Function to check if any parent element has a data attribute starting with "analytics-"
+function hasParentWithAnalyticsAttribute(element) {
+    if (!element?.attributes) return false;
+
+    // Check if the current element has a data attribute starting with "analytics-"
+    for (const attribute of element.attributes) {
+        const attributeName = attribute.name;
+        if (attributeName.startsWith('data-analytics-')) {
+            return element;
         }
-    });
+    }
+    // Recursively check the parent elements
+    return hasParentWithAnalyticsAttribute(element.parentNode);
 }
 
 // Push resource link click event to data layer
