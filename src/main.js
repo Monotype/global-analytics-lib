@@ -395,6 +395,8 @@ function getClickDataForCookieElements(eventTarget) {
         pushLinkClickEvent(setCookieConsentClicks("privacy policy settings", pageInfoObj.pageInfo?.pageName, "allow all", "button"), 'linkClick');
     } else if (eventTarget.classList.contains('onetrust-close-btn-handler')) {
         pushLinkClickEvent(setCookieConsentClicks("privacy policy settings", pageInfoObj.pageInfo?.pageName, "close", "button"), 'linkClick');
+    } else if (eventTarget.id == 'onetrust-reject-all-handler') {
+        pushLinkClickEvent(setCookieConsentClicks("privacy policy settings", pageInfoObj.pageInfo?.pageName, "reject all", "button"), 'linkClick');
     }
 }
 
@@ -569,7 +571,7 @@ if (typeof Vimeo === 'undefined' || typeof Vimeo.Player === 'undefined') {
     console.log('Load Vimeo Player library to track Vimeo videos - https://player.vimeo.com/api/player.js');
 } else {
     Array.from(iframes).map(iframe => {
-        if (iframe?.src?.includes("vimeo")) {
+        if (iframe?.src?.includes("vimeo") && !iframe?.src?.includes("autoplay=1") && !iframe?.src?.includes("loop=1")) {
             const player = new Vimeo.Player(iframe);
 
             let videoDuration;
