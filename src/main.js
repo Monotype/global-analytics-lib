@@ -1,13 +1,35 @@
+// Vimeo player API to track vimeo player events
+// import Player from '@vimeo/player';
+
 // Description: This file is used to push data to adobeDataLayer object
 // adobeDataLayer declaration
 window.adobeDataLayer = window.adobeDataLayer || [];
+
+const crypto = window.crypto || window.msCrypto;
+
 // Get pageInfo object from global variable
 const pageInfoObj = typeof pageInfoGlobal != 'undefined' ? JSON.parse(JSON.stringify(pageInfoGlobal)) : {};
-// Check if the page is search page
-const isSearchPage = window.location.pathname.includes('search');
+
+// Identifier to check if a page has any custom pageLoad event
+const hasCustomPageLoad = pageInfoObj.hasCustomPageLoad ?? false;
+
+const vidName = pageInfoObj.pageInfo?.videoName ?? '';
+
 let formabandonField = '';
 
 const cookieConsent = document.cookie.split(';').filter((item) => item.trim().startsWith('OptanonConsent='));
+
+// Custom event for link click
+const CustomAnalyticsEventEmitter = {
+    dispatch: function (eventName, eventData) {
+        let customEvent = new CustomEvent(eventName, {
+            detail: eventData,
+            bubbles: true,
+            cancelable: true
+        });
+        document.dispatchEvent(customEvent);
+    }
+};
 
 // Link Data attributes and parent object mapping
 // @update this object to add new data attributes with respective parent object and actual key that needs to be pushed to adobeDataLayer
@@ -16,24 +38,34 @@ const linkClickAttributes = {
     "linksection": "links|linkSection",
     "linkname": "links|linkName",
     "linktype": "links|linkType",
-    "family": "fonts",
-    "foundary": "fonts",
-    "language": "fonts"
+    "family": "font",
+    "foundary": "font",
+    "language": "font",
+    "resourcetopic": "content|resourceTopic",
+    "resourcetitle": "content|resourceTitle"
 }
 
 const anonymousIDLife = 15; // 15 minutes
 
 // Push pageInfo to adobeDataLayer
-function getDataLayerInfo(eventName, eventInfo) {
-    window.adobeDataLayer.push({
+function getDataLayerInfo(eventName, eventInfo, userConsent, cookie) {
+    let pageLoadData = {
         "event": eventName,
         "eventInfo": eventInfo,
         "pageInfo": getPageInfo(),
-        "userInfo": getUserInfo(),
+        "userInfo": getUserInfo(userConsent, cookie),
         "userOrganization": getUserOrganization(),
-        "pageContent": getPageContent(),
         "pageError": getPageErrorInfo()
-    });
+    };
+
+    // Loop through the pageInfoObj and check if the key is present in pageLoadData object, if not then add it to the pageLoadData object
+    for (let key in pageInfoObj) {
+        if (!pageLoadData[key]) {
+            pageLoadData[key] = pageInfoObj[key];
+        }
+    }
+
+    window.adobeDataLayer.push(pageLoadData);
 }
 
 // Get page info
@@ -45,6 +77,7 @@ function getPageInfo() {
         "webLanguage": pageInfoObj.pageInfo?.webLanguage ?? '',
         "pageUrl": pageInfoObj.pageInfo?.pageUrl ?? '',
         "webCurrency": pageInfoObj.pageInfo?.webCurrency ?? '',
+        "findingMethod": pageInfoObj.pageInfo?.findingMethod ?? ''
     }
 }
 
@@ -59,14 +92,6 @@ function getUserOrganization() {
     }
 }
 
-// Get page content info
-function getPageContent() {
-    return {
-        "resourceTopic": pageInfoObj.pageContent?.resourceTopic ?? '',
-        "resourceTitle": pageInfoObj.pageContent?.resourceTitle ?? '',
-    }
-}
-
 // Get page error info
 function getPageErrorInfo() {
     return {
@@ -77,7 +102,7 @@ function getPageErrorInfo() {
 }
 
 // Get user info 
-function getUserInfo() {
+function getUserInfo(userConsent, cookie) {
     return {
         "encryptedUserEmail": pageInfoObj.userInfo?.encryptedUserEmail ?? '',
         "userRole": pageInfoObj.userInfo?.userRole ?? '',
@@ -87,34 +112,86 @@ function getUserInfo() {
         "guid": pageInfoObj.userInfo?.guid ?? '',
         "hasMultipleOrganization": pageInfoObj.userInfo?.hasMultipleOrganization ?? '',
         "associatedOrgCnt": pageInfoObj.userInfo?.associatedOrgCnt ?? '',
-        "userConsent": pageInfoObj.userInfo?.userConsent ?? (cookieConsent && cookieConsent.length > 0) ? 'optin' : 'optout',
-        "consentGroup": pageInfoObj.userInfo?.consentGroup ?? getCookieConsentGroupStatus(),
+        "userConsent": userConsent ?? getUserCookieConsent(cookieConsent),
+        "consentGroup": pageInfoObj.userInfo?.consentGroup ?? getCookieConsentGroupStatus(cookie ?? cookieConsent),
         "anonymisedID": pageInfoObj.userInfo?.anonymisedID ?? getAnonymousID(),
         "userStatus": pageInfoObj.userInfo?.userStatus ?? 'guest',
+        "Auth0Id": pageInfoObj.userInfo?.Auth0Id ?? '',
     }
 }
 
 // Add a click event listener to the document
-document.addEventListener('DOMContentLoaded', (e) => {
-    getDataLayerInfo('pageLoad', 'regularPageLoad');
+document.addEventListener('DOMContentLoaded', () => {
+    let lazyLoadElements = pageInfoObj.lazyLoadIdentifier?.split(',');
+    delete pageInfoObj.lazyLoadIdentifier;
+    delete pageInfoObj.hasCustomPageLoad;
+    if (!hasCustomPageLoad) {
+        if (cookieConsent && cookieConsent.length > 0) {
+            getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad');
+        } else {
+            checkCookieAndPushPageLoadEvent();
+        }
+    }
     getAnalyticsOnLinkClicks();
     document.addEventListener('click', function (event) {
         getClickDataForCookieElements(event.target);
-        if (typeof Intercom !== 'undefined') {
+        let isIntercomElement = event.target.parentElement?.parentElement?.classList.contains('intercom-lightweight-app-launcher-icon') || event.target.classList.contains('intercom-lightweight-app-launcher-icon');
+        if (typeof Intercom !== 'undefined' && isIntercomElement) {
             getIntercomAnalytics();
         }
-        if (isSearchPage) {
-            pushSearchResultClickData();
-        }
     }, true);
-    if (isSearchPage) {
-        getSearchTermAnalytics();
-    }
+    document.addEventListener('customAnalyticsEvent', function (e) {
+        let eventData = e.detail;
+        window.adobeDataLayer.push(eventData);
+    });
+    getLazyLoadedElements(lazyLoadElements);
 });
+
+function checkCookieAndPushPageLoadEvent() {
+    let maxInterval = 5000; // 5 seconds in milliseconds
+    let elapsedTime = 0;
+    let intervalId;
+    function performCheck() {
+        let oneTrustCookie = document.cookie.split(';').filter((item) => item.trim().startsWith('OptanonConsent='));
+        if ((oneTrustCookie && oneTrustCookie.length > 0) || (elapsedTime >= maxInterval)) {
+            // Condition met, call getDataLayerInfo and clear the interval
+            let userConsent = getUserCookieConsent(oneTrustCookie);
+            getDataLayerInfo('pageLoad', pageInfoObj.pageInfo?.eventInfo ?? 'regularPageLoad', userConsent, oneTrustCookie);
+            clearInterval(intervalId);
+            console.log("Page load event pushed");
+        }
+        elapsedTime += 1000; // Increment elapsed time by 1 second
+    }
+
+    // Set up the interval for continuous checking
+    intervalId = setInterval(performCheck, 1000); // Check every second (adjust as needed)
+}
+
+function getLazyLoadedElements(elements) {
+    elements?.forEach(element => {
+        document.querySelector(element)?.addEventListener('click', function (event) {
+            if (element == '.mt-load-more-elements-wrapper') {
+                hasParentWithAnalyticsAttribute(event.target) && getResourceTileElement(event, hasParentWithAnalyticsAttribute(event.target));
+                if (!event.target.dataset.analyticsLinkEventAttached) {
+                    getAnalyticsOnLinkClicks(true, event.target);
+                }
+            }
+        }, true);
+    })
+}
 
 function getPageSection() {
     let pathname = window.location.pathname;
-    return pathname.split('/')[1] == Drupal.currentLanguage ? pathname.split('/')[2] : pathname.split('/')[1];
+    let pageSection = function checkForFontKeyword(param, n) {
+        return param == 'font' ? pathname.split('/')[n + 1] : pathname.split('/')[n];
+    }
+    if (typeof Drupal !== 'undefined' && window.location.origin.includes('monotype.')) {
+        return (pathname.split('/')[1] == Drupal.currentLanguage) ? pathname.split('/')[2] : pathname.split('/')[1];
+    }
+    if (pathname.split('/')[1] == document.documentElement.lang) {
+        return (pathname.split('/')[2] == 'a') ? pageSection(pathname.split('/')[3], 3) : pathname.split('/')[2];
+    }
+    return (pathname.split('/')[1] == 'a') ? pageSection(pathname.split('/')[2], 2) : pathname.split('/')[1];
 }
 
 if (typeof MktoForms2 === 'undefined') {
@@ -130,9 +207,13 @@ if (typeof MktoForms2 === 'undefined') {
             let checkboxObj = {};
             // Loop through all the checkboxes and add name and value to the object
             formCheckboxes.forEach(checkbox => {
-                checkboxObj[checkbox.name] = checkbox.value == 'yes' ? 'enable' : 'disable';
+                if (checkbox.name == 'Mailing_List_Opt_in__c') {
+                    checkboxObj['emailCheckBox'] = checkbox.value == 'yes' ? 'enable' : 'disable';
+                } else {
+                    checkboxObj[checkbox.name] = checkbox.value == 'yes' ? 'enable' : 'disable';
+                }
             });
-            formabandonField = getformAbandonField(formFields);
+            getformAbandonField(formFields);
             getFormStartAnalytics(form, formName, formFields);
             form.onSubmit(function () {
                 getFormSubmitAnalytics(form, formName, formFields, checkboxObj);
@@ -146,37 +227,49 @@ if (typeof MktoForms2 === 'undefined') {
 
 // add onblur event to all form fields to get the last field that user has interacted with
 function getformAbandonField(formFields) {
-    let abandonedField = formFields[0]?.name;
+    formabandonField = formFields[0]?.name;
     formFields.forEach(field => {
         field.addEventListener('blur', (event) => {
             formabandonField = field.name;
         });
     });
-    return abandonedField;
 }
 
 function getFormName(formEl) {
     if (formEl.parentElement.classList.contains('gated-marketo')) {
         return formEl.previousElementSibling.innerText;
-    } else if (formEl.parentElement.dataset.id) {
+    } else if (formEl.parentElement.dataset.id || formEl.parentElement.dataset.form) {
         return formEl.parentElement.children[0].innerText;
-    } else if (formEl.parentElement.previousElementSibling.classList.contains('marketo-main-title')) {
+    } else if (formEl.parentElement.previousElementSibling?.classList.contains('marketo-main-title')) {
         return formEl.parentElement.previousElementSibling.innerText;
     } else return '';
 }
 
+function getUserCookieConsent(cookie) {
+    let userConsent = false;
+    if (cookie && cookie.length > 0) {
+        getCookieConsentGroup(cookie)?.split(',').forEach(item => {
+            let group = item.split(':');
+            if (group[0] == 'C0002' && group[1] == "1") {
+                userConsent = true;
+            }
+        });
+    }
+    return userConsent ? 'optin' : 'optout';
+}
+
 // Get cookie consent group from OptanonConsent cookie key from encoded string - used copilot to generate this function
-function getCookieConsentGroup() {
+function getCookieConsentGroup(cookie) {
     let cookieConsentGroup = "";
-    if (cookieConsent.length) {
-        cookieConsentGroup = decodeURIComponent(cookieConsent[0]).split('&').filter((item) => item.trim().startsWith('groups='))[0].split('=')[1];
+    if (cookie.length) {
+        cookieConsentGroup = decodeURIComponent(cookie[0]).split('&').filter((item) => item.trim().startsWith('groups='))[0].split('=')[1];
     }
     return cookieConsentGroup;
 }
 
 // Get cookie consent group status based on mapping - used copilot to generate this function
-function getCookieConsentGroupStatus() {
-    let cookieConsentGroup = getCookieConsentGroup();
+function getCookieConsentGroupStatus(cookie) {
+    let cookieConsentGroup = getCookieConsentGroup(cookie);
     const cookieConsentGroupMapping = {
         "C0001": "necessary",
         "C0002": "performance",
@@ -202,12 +295,13 @@ function getCookieConsentGroupStatus() {
 
 // Generate a random anonymous ID
 function generateAnonymousID() {
-    return [...Array(16)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+    const array = new Uint8Array(8);
+    crypto.getRandomValues(array);
+    return Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 // To get or set the anonymousID in a cookie
 function getAnonymousID() {
-    const cookieName = 'anonymousID';
     const cookieValue = document.cookie.replace(/(?:(?:^|.*;\s*)anonymousID\s*=\s*([^;]*).*$)|^.*$/, '$1');
     if (cookieValue) {
         // Check if the anonymous ID is still valid
@@ -241,34 +335,50 @@ function getAllTargetElements() {
 }
 
 // Get analytics data on link clicks - used copilot to generate this function
-function getAnalyticsOnLinkClicks() {
-    getAllTargetElements()?.forEach(el => {
-        el.addEventListener("click", (event) => {
+function getAnalyticsOnLinkClicks(stopPropagation, targetEl) {
+    if (stopPropagation) {
+        attachLinkClickToElement(targetEl, stopPropagation);
+    } else {
+        getAllTargetElements()?.forEach(el => {
+            el.dataset.analyticsLinkEventAttached = true;
+            attachLinkClickToElement(el, stopPropagation)
+        })
+    }
+}
+
+function attachLinkClickToElement(el, stopPropagation) {
+    el.addEventListener("click", (event) => {
+        stopPropagation && event.stopImmediatePropagation();
+        if (!el.dataset.analyticsIscustomevent) {
             let dataAttributes = Object.keys(el.dataset).filter(key => key.startsWith("analytics"));
             let linkClickData = {};
-            dataAttributes.forEach(key => {
-                // remove analytics from key and get category in small case and split by _ and capitalize last word
-                let category = key.replace("analytics", "").toLowerCase();
-                if (linkClickAttributes[category]) {
-                    let linkDataAttr = linkClickAttributes[category].split("|");
-                    let linkDataAttrKey = linkDataAttr[1] ?? category;
-                    // create object with category as key and value as object with key as category and value as data attribute value
-                    // check if category already exists in object then add new key value pair to existing object
-                    if (linkClickData[linkDataAttr[0]]) {
-                        linkClickData[linkDataAttr[0]][linkDataAttrKey] = el.dataset[key];
-                    } else {
-                        linkClickData[linkDataAttr[0]] = {
-                            [linkDataAttrKey]: el.dataset[key]
-                        }
-                    }
-                }
-            });
+            createLinkClickData(el, linkClickData, dataAttributes);
             // check if linkclickdata has any values then push to dataLayer
             if (Object.keys(linkClickData).length) {
                 pushLinkClickEvent(linkClickData, el.dataset['analyticsEvent'] ?? 'linkClick');
             }
-        });
-    })
+        }
+    });
+}
+
+function createLinkClickData(el, linkClickData, dataAttributes) {
+    dataAttributes.forEach(key => {
+        // remove analytics from key and get category in small case and split by _ and capitalize last word
+        let category = key.replace("analytics", "").toLowerCase();
+        if (linkClickAttributes[category]) {
+            let linkDataAttr = linkClickAttributes[category].split("|");
+            let linkDataAttrKey = linkDataAttr[1] ?? category;
+            // create object with category as key and value as object with key as category and value as data attribute value
+            // check if category already exists in object then add new key value pair to existing object
+            if (linkClickData[linkDataAttr[0]]) {
+                linkClickData[linkDataAttr[0]][linkDataAttrKey] = el.dataset[key];
+            } else {
+                linkClickData[linkDataAttr[0]] = {
+                    [linkDataAttrKey]: el.dataset[key]
+                }
+            }
+        }
+    });
 }
 
 // Get click data for cookie elements
@@ -318,7 +428,7 @@ function getIntercomAnalytics() {
             "event": "chatInitiate",
             "links": {
                 "linkCategory": "chat",
-                "linkSection": "body-bottom-fixed",
+                "linkSection": !pageInfoObj.pageInfo?.pageSection ? getPageSection() : pageInfoObj.pageInfo?.pageSection,
                 "linkName": "chat open",
                 "linkType": "img"
             }
@@ -330,60 +440,10 @@ function getIntercomAnalytics() {
             "event": "chatClose",
             "links": {
                 "linkCategory": "chat",
-                "linkSection": "body-bottom-fixed",
+                "linkSection": !pageInfoObj.pageInfo?.pageSection ? getPageSection() : pageInfoObj.pageInfo?.pageSection,
                 "linkName": "chat close",
                 "linkType": "img"
             }
-        });
-    });
-}
-
-// Push Search Initiate event to data layer 
-const searchInputEl = document.querySelector('.form-item-search input');
-
-searchInputEl.addEventListener('keydown', (event) => {
-    if (event.keyCode === 13) {
-        let searchEvent = {
-            "event": "searchInitiate",
-            "search": {
-                "searchType": pageInfoObj.search?.searchType ?? 'inline search',
-                "searchTerm": event.target.value,
-            },
-        }
-        window.adobeDataLayer.push(searchEvent);
-    }
-});
-
-function getSearchTermAnalytics() {
-    let searchResultCount = document.querySelector(".view-algolia-search")?.dataset.searchCount;
-    const urlParams = new URLSearchParams(window.location.search);
-    let searchTerm = urlParams.get('search');
-    let eventInfo = searchResultCount == 0 ? 'zeroSearchResult' : 'searchComplete';
-    window.adobeDataLayer.push({
-        "event": "pageLoad",
-        "eventInfo": eventInfo,
-        "search": {
-            "searchType": pageInfoObj.search?.searchType ?? 'inline search',
-            "searchTerm": searchTerm,
-            "searchResultCount": searchResultCount
-        },
-    });
-}
-
-function pushSearchResultClickData() {
-    document.querySelectorAll('.views-row h3 a').forEach((el, index) => {
-        el.addEventListener('click', (event) => {
-            event.stopImmediatePropagation();
-            let searchResultClickEvent = {
-                "event": "searchResultClick",
-                "search": {
-                    "searchType": pageInfoObj.search?.searchType ?? 'inline search',
-                    "searchTerm": searchInputEl?.value,
-                    "searchResultClickedPosition": index + 1,
-                    "searchResultClicked": event.target.innerText,
-                },
-            }
-            window.adobeDataLayer.push(searchResultClickEvent);
         });
     });
 }
@@ -395,7 +455,7 @@ function getFormStartAnalytics(form, formName, formFields) {
         "event": "formStart",
         "form": {
             "formName": formName,
-            "formFieldCount": `${formFields.length}`,
+            "formfieldCount": `${formFields.length}`,
         }
     }
     // check if data layer already has formStart event
@@ -403,7 +463,7 @@ function getFormStartAnalytics(form, formName, formFields) {
         field.addEventListener('focus', () => {
             if (!isEventPushed('formStart')) {
                 window.adobeDataLayer.push(formStartEvent);
-            };
+            }
         });
     });
 }
@@ -435,7 +495,7 @@ function getFormSuccessAnalytics(form, formName, formFields) {
 }
 
 // Trigger formAbandon event when user abandon the form
-function getFormAbandonAnalytics(form, formName, formFields, formabandonField) {
+function getFormAbandonAnalytics(form, formName, formFields) {
     let formAbandonEvent = {
         "event": "formAbandon",
         "form": {
@@ -459,28 +519,34 @@ function isEventPushed(eventName) {
     return false;
 }
 
+// Cross-browser function to get the document visibility state
+function getVisibilityState() {
+    return document.visibilityState || document.webkitVisibilityState || document.mozVisibilityState || "visible";
+}
+
 // call getFormAbandonAnalytics when user leaves the page without submitting the form
-window.addEventListener('beforeunload', function (e) {
-    if (!isEventPushed('formSubmit')) {
-        // get all forms with class .mktoForm and an id
-        let marketoForms = document.querySelectorAll('.mktoForm[id]');
-        if (marketoForms.length > 0) {
-            marketoForms.forEach(form => {
-                let formName = getFormName(form);
-                let formFields = form.querySelectorAll('.mktoField:not([type="hidden"])');
-                getFormAbandonAnalytics(form, formName, formFields, formabandonField);
-            });
-        } else {
-            let webforms = document.querySelectorAll('.webform-submission-form');
-            webforms.forEach(form => {
-                let formName = form.previousElementSibling?.innerText;
-                // Get all input, select, textarea , checkbox and radio fields from the form
-                let formFields = form.querySelectorAll(".analytics-field");
-                getFormAbandonAnalytics(form, formName, formFields, formabandonField);
-            });
+document.addEventListener("visibilitychange", function () {
+    if (getVisibilityState() === "hidden") {
+        if (isEventPushed('formStart') && !isEventPushed('formSubmit')) {
+            // get all forms with class .mktoForm and an id
+            let marketoForms = document.querySelectorAll('.mktoForm[id]');
+            if (marketoForms.length > 0) {
+                marketoForms.forEach(form => {
+                    let formName = getFormName(form);
+                    let formFields = form.querySelectorAll('.mktoField:not([type="hidden"])');
+                    getFormAbandonAnalytics(form, formName, formFields);
+                });
+            } else {
+                let webforms = document.querySelectorAll('.webform-submission-form');
+                webforms.forEach(form => {
+                    let formName = form.previousElementSibling?.innerText;
+                    // Get all input, select, textarea , checkbox and radio fields from the form
+                    let formFields = form.querySelectorAll(".analytics-field");
+                    getFormAbandonAnalytics(form, formName, formFields);
+                });
+            }
         }
     }
-    console.log("adobeDataLayer: ", window.adobeDataLayer);
 });
 
 // Vimeo and mp4 video tracking
@@ -493,119 +559,94 @@ let milestoneReached = {
     75: false
 };
 
-Array.from(iframes).map(iframe => {
-    if (iframe && iframe.src && iframe.src.includes("vimeo")) {
-        const player = new Vimeo.Player(iframe);
+let videoLengthPercentage = 0;
 
-        let videoDuration;
+let videoStarted = false;
 
-        let videoProgressPercent = 0;
+let videoProgressPercent = 0;
 
-        let videoName = iframe.parentElement.dataset.analyticsVideoname ? iframe.parentElement.dataset.analyticsVideoname : pageInfoObj.pageInfo?.pageName;
+if (typeof Vimeo === 'undefined' || typeof Vimeo.Player === 'undefined') {
+    console.log('Load Vimeo Player library to track Vimeo videos - https://player.vimeo.com/api/player.js');
+} else {
+    Array.from(iframes).map(iframe => {
+        if (iframe?.src?.includes("vimeo")) {
+            const player = new Vimeo.Player(iframe);
 
-        player.getDuration().then(function (duration) {
-            videoDuration = duration;
-        });
+            let videoDuration;
 
-        player.on('play', function () {
-            window.adobeDataLayer.push({
-                "event": "videoStart",
-                "video": {
-                    "videoName": videoName,
-                    "videoLength": `${videoDuration}`
+            let videoName = iframe.parentElement.dataset.analyticsVideoname ? iframe.parentElement.dataset.analyticsVideoname : vidName;
+
+            player.getDuration().then(function (duration) {
+                videoDuration = duration;
+            });
+
+            player.on('play', function () {
+                getVideoStartAnalytics(videoName, videoDuration);
+            });
+
+            player.on('pause', function () {
+                videoStarted = false;
+                if (videoLengthPercentage < 100) {
+                    window.adobeDataLayer.push({
+                        "event": "videoPause",
+                        "video": {
+                            "videoName": videoName,
+                            "videoLength": `${videoDuration}`,
+                            "videoPercent": videoProgressPercent
+                        }
+                    });
                 }
             });
-        });
 
-        player.on('pause', function () {
-            window.adobeDataLayer.push({
-                "event": "videoPause",
-                "video": {
-                    "videoName": videoName,
-                    "videoLength": `${videoDuration}`,
-                    "videoPercent": videoProgressPercent
-                }
+            player.on('ended', function () {
+                getVideoEndAnalytics(videoName, videoDuration);
             });
-        });
 
-        player.on('ended', function () {
-            window.adobeDataLayer.push({
-                "event": "videoComplete",
-                "video": {
-                    "videoName": videoName,
-                    "videoLength": `${videoDuration}`,
-                    "videoPercent": videoProgressPercent
-                }
+            player.on('timeupdate', function (data) {
+                let currentTime = data.seconds;
+                let duration = data.duration;
+
+                let progress = Math.floor((currentTime / duration) * 100);
+                getVideoProgress(progress, videoName, videoDuration);
             });
-        });
-
-        player.on('timeupdate', function (data) {
-            let currentTime = data.seconds;
-            let duration = data.duration;
-
-            let progress = Math.floor((currentTime / duration) * 100);
-
-            if (milestoneReached[progress] === false) {
-                window.adobeDataLayer.push({
-                    "event": "videoProgress",
-                    "video": {
-                        "videoName": videoName,
-                        "videoLength": `${videoDuration}`,
-                        "videoPercent": progress + "%"
-                    }
-                });
-                milestoneReached[progress] = true;
-            } else {
-                videoProgressPercent = progress + "%";
-            }
-        });
-    }
-});
+        }
+    });
+}
 
 const vids = document.querySelectorAll('video');
 
 Array.from(vids).map(vid => {
     let videoSource = vid.querySelector('source');
-    if (vid && videoSource.src && videoSource.src.includes("mp4")) {
+    const isAutoplay = vid.autoplay;
+    const isLooping = vid.loop;
+    if (vid && videoSource.src && videoSource.src.includes("mp4") && !isAutoplay && !isLooping) {
 
         vid.addEventListener('loadedmetadata', function () {
 
             let videoDuration = Math.floor(vid.duration);
 
-            let videoProgressPercent = 0;
-
-            let videoName = vid.dataset.analyticsVideoname ? vid.dataset.analyticsVideoname : pageInfoObj.pageInfo?.pageName;
+            let videoName = vid.dataset.analyticsVideoname ? vid.dataset.analyticsVideoname : vidName;
 
             vid.addEventListener('play', function () {
-                window.adobeDataLayer.push({
-                    "event": "videoStart",
-                    "video": {
-                        "videoName": videoName,
-                        "videoLength": `${videoDuration}`
-                    }
-                });
+                getVideoStartAnalytics(videoName, videoDuration);
             });
 
             vid.addEventListener('pause', function () {
-                window.adobeDataLayer.push({
-                    "event": "videoPause",
-                    "video": {
-                        "videoName": videoName,
-                        "videoLength": `${videoDuration}`,
-                        "videoPercent": videoProgressPercent
-                    }
-                });
+                videoStarted = true;
+                if (videoLengthPercentage < 100) {
+                    window.adobeDataLayer.push({
+                        "event": "videoPause",
+                        "video": {
+                            "videoName": videoName,
+                            "videoLength": `${videoDuration}`,
+                            "videoPercent": videoProgressPercent
+                        }
+                    });
+                }
             });
 
             vid.addEventListener('ended', function () {
-                window.adobeDataLayer.push({
-                    "event": "videoComplete",
-                    "video": {
-                        "videoName": videoName,
-                        "videoLength": `${videoDuration}`,
-                        "videoPercent": videoProgressPercent
-                    }
-                });
+                getVideoEndAnalytics(videoName, videoDuration);
             });
 
             vid.addEventListener('timeupdate', function () {
@@ -613,21 +654,236 @@ Array.from(vids).map(vid => {
 
                 let progress = Math.floor((Math.floor(currentTime) / videoDuration) * 100);
 
-                if (milestoneReached[progress] === false) {
-                    window.adobeDataLayer.push({
-                        "event": "videoProgress",
-                        "video": {
-                            "videoName": videoName,
-                            "videoLength": `${videoDuration}`,
-                            "videoPercent": progress + "%"
-                        }
-                    });
-                    milestoneReached[progress] = true;
-                } else {
-                    videoProgressPercent = progress + "%";
-                }
+                getVideoProgress(progress, videoName, videoDuration);
             });
 
         });
     }
 });
+
+function getVideoProgress(progress, videoName, videoDuration) {
+    if (milestoneReached[progress] === false) {
+        window.adobeDataLayer.push({
+            "event": "videoProgress",
+            "video": {
+                "videoName": videoName,
+                "videoLength": `${videoDuration}`,
+                "videoPercent": progress + "%"
+            }
+        });
+        milestoneReached[progress] = true;
+    } else {
+        videoProgressPercent = progress + "%";
+        videoLengthPercentage = progress;
+    }
+}
+
+function getVideoStartAnalytics(videoName, videoDuration) {
+    if (!videoStarted) {
+        window.adobeDataLayer.push({
+            "event": "videoStart",
+            "video": {
+                "videoName": videoName,
+                "videoLength": `${videoDuration}`
+            }
+        });
+        videoStarted = true;
+    }
+}
+
+function getVideoEndAnalytics(videoName, videoDuration) {
+    window.adobeDataLayer.push({
+        "event": "videoComplete",
+        "video": {
+            "videoName": videoName,
+            "videoLength": `${videoDuration}`,
+            "videoPercent": videoProgressPercent
+        }
+    });
+}
+
+// Inline search and search result page analytics
+
+function getUrlParameter(attributeName) {
+    let url = window.location.href;
+    let urlSearchParams = new URLSearchParams(url);
+    return urlSearchParams.get(attributeName);
+}
+
+function sendSearchResultClickInfo(searchType, fontDetail) {
+    console.log(fontDetail);
+    const eventData = fontDetail.data.eventData;
+    let serachObj = {};
+    let event = "searchResultClick";
+    if (searchType == "inline") {
+        serachObj = {
+            "searchType": searchType,
+            "inlineSearchTerm": eventData.inlineSearchTerm,
+            "inlineSearchResultTerm": eventData.inlineSearchResultTerm,
+            "inlineSearchResultClicked": fontDetail.data.title,
+            "inlineSearchResultClickPos": eventData.positions[0].toString(),
+        }
+    }
+    if (searchType == "wtf") {
+        event = "wtfSearchResultClick";
+        serachObj = {
+            "searchType": searchType,
+            "wtfSearchType": "",
+            "wtfSearchResultClicked": fontDetail.data.title,
+            "wtfSearchResultPage": getUrlParameter("page") ? getUrlParameter("page") : "1",
+            "wtfSearchResultClickPos": eventData.positions[0].toString(),
+        }
+    }
+    window.adobeDataLayer.push({
+        "event": event,
+        "search": serachObj,
+        "font": {
+            "fontID": fontDetail.data.family_id,
+            "fontfamily": fontDetail.data.title,
+            "fontFoundry": fontDetail.data.foundry_name,
+            "fontSource": "Monotype Fonts",
+            "fontActionLocation": "inline search result",
+        }
+    })
+}
+
+function getInlinePageInfo(event, searchObj) {
+    let searchData = {};
+    searchData.event = event;
+    searchData.search = {
+        searchType: "inline",
+        inlineSearchTerm: searchObj.searchTerm,
+        inlineSearchType: searchObj.searchTabName,
+        inlineSearchCategory: searchObj.searchCategory,
+        inlineSearchCatVal: searchObj.searchCategoryValue,
+        inlineSearchSuggestClickedPosition: searchObj.searchSuggestClickedPos.toString(),
+
+    }
+    console.log("final search data : ", searchData);
+    window.adobeDataLayer.push(searchData);
+}
+function getSearchResultPageInfo(event, eventInfo, findingMethod, searchObj) {
+    let searchData = {};
+    searchData.event = event;
+    searchData.eventInfo = "searchResultPage";
+    if (searchObj.searchType == "inline" || searchObj.searchType == "inline zero search") {
+        searchData.eventInfo = "searchResult"
+        searchData.search = {
+            "searchType": searchObj.searchType,
+            "inlineSearchTerm": pageInfoGlobal.pageInfo.inlineSearchTerm ? pageInfoGlobal.pageInfo.inlineSearchTerm : searchObj.searchTerm,
+            "inlineSearchResultTerm": pageInfoGlobal.pageInfo.inlineSearchResultTerm ? pageInfoGlobal.pageInfo.inlineSearchResultTerm : searchObj.searchTerm,
+            "inlineSearchResultCount": searchObj.searchResultCount.toString()
+        }
+    }
+    if (searchObj.searchType == "wtf") {
+        searchData.eventInfo = "wtfSearchResultPage";
+        searchData.search = {
+            "searchType": searchObj.searchType,
+            "wtfsearchType": "", // this need to be actually how user landend on wtf page
+            "wtfSearchResultCount": searchObj.searchResultCount.toString()
+        }
+    }
+    console.log("final search data", searchData);
+    if (event == "pageLoad") {
+        pageInfoObj.pageInfo.eventInfo = searchData.eventInfo;
+        pageInfoObj.pageInfo.findingMethod = pageInfoObj.pageInfo.findingMethod ? pageInfoObj.pageInfo.findingMethod : findingMethod;
+        pageInfoObj.search = searchData.search;
+        getDataLayerInfo('pageLoad', pageInfoObj.pageInfo.eventInfo ?? 'regularPageLoad');
+    } else {
+        window.adobeDataLayer.push(searchData);
+    }
+}
+
+function getSearchFilterData(filterType, filterApplied) {
+    const searchFilterData = {
+        "event": "filterApplied",
+        "filter": {
+            "filterType": filterType,
+            "filterApplied": filterApplied
+        }
+    };
+    console.log("searchFilterData: ", searchFilterData);
+    window.adobeDataLayer.push(searchFilterData);
+}
+
+function getSearchSortData(sortData) {
+    if (sortData) {
+        const searchFilterData = {
+            "event": "sortChange",
+            "sort": {
+                "resultSort": sortData
+            }
+        };
+        console.log("search sort data: ", searchFilterData);
+        window.adobeDataLayer.push(searchFilterData);
+    }
+}
+
+function getSearchTypeTesterData(typeTesterData) {
+    if (typeTesterData) {
+        const typeTesterEventData = {
+            "event": "searchfeature",
+            "search": {
+                "searchFeature": typeTesterData
+            }
+        };
+        console.log("typeTesterEventData data: ", typeTesterEventData);
+        window.adobeDataLayer.push(typeTesterEventData);
+    }
+}
+
+// Add click event to Resource listing image and title
+function getResourceTileElement(event, parentEl) {
+    event.stopImmediatePropagation();
+    let linkType = event.target.tagName == 'IMG' ? 'image' : 'text';
+    let isLinkorImgElement = event.target.parentElement.classList.contains('component-title') || event.target.tagName == 'IMG';
+    if (isLinkorImgElement) {
+        pushResourceClickEventData(parentEl, linkType);
+    } else if (hasParentWithAnalyticsAttribute(event.target)) {
+        pushResourceClickEventData(event.target, 'button')
+    }
+}
+
+// Function to check if any parent element has a data attribute starting with "analytics-"
+function hasParentWithAnalyticsAttribute(element) {
+    if (!element?.attributes) return false;
+
+    // Check if the current element has a data attribute starting with "analytics-"
+    for (const attribute of element.attributes) {
+        const attributeName = attribute.name;
+        if (attributeName.startsWith('data-analytics-')) {
+            return element;
+        }
+    }
+    // Recursively check the parent elements
+    return hasParentWithAnalyticsAttribute(element.parentNode);
+}
+
+// Push resource link click event to data layer
+function pushResourceClickEventData(element, linkType) {
+    window.adobeDataLayer.push({
+        event: element.dataset.analyticsEvent ?? 'linkClick',
+        links: {
+            linkCategory: element.dataset.analyticsLinkcategory,
+            linkSection: element.dataset.analyticsLinksection,
+            linkName: element.dataset.analyticsLinkname,
+            linkType: linkType
+        },
+        content: {
+            resourceTopic: element.dataset.analyticsResourcetopic,
+            resourceTitle: element.dataset.analyticsResourcetitle
+        }
+    });
+}
+
+// Attach the variables and functions to the global object if not used in this script
+if (typeof window !== 'undefined') {
+    window.CustomAnalyticsEventEmitter = CustomAnalyticsEventEmitter;
+    window.formabandonField = formabandonField;
+    window.sendSearchResultClickInfo = sendSearchResultClickInfo;
+    window.getInlinePageInfo = getInlinePageInfo;
+    window.getSearchResultPageInfo = getSearchResultPageInfo;
+    window.getSearchFilterData = getSearchFilterData;
+    window.getSearchSortData = getSearchSortData;
+    window.getSearchTypeTesterData = getSearchTypeTesterData;
+}

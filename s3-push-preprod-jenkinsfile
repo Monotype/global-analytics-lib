@@ -1,0 +1,99 @@
+def envVars = env.getEnvironment()
+
+def err = null
+currentBuild.result = "SUCCESS"
+
+try {
+  // Build starts here. We put this in a try/except/finally block so that we can
+  // perform post-build actions(such as Slack notifications).
+
+    node("linux-mosaic") {
+        stage('Clean Workspace') {
+           sh '''
+                    sudo rm -rf ${WORKSPACE}/* 
+                '''
+        }
+
+        stage('Code Checkout') {
+            checkout([$class: 'GitSCM',
+            branches: scm.branches,
+            gitTool: 'Default',
+            userRemoteConfigs: [[credentialsId: 'Jenkins-Monotype-Github',
+            url: 'https://github.com/Monotype/global-analytics-lib.git']]])
+        }
+
+        stage('Build docker image') {
+            try {
+                sh '''
+                    docker build --no-cache=true  -t global-analytics:latest .
+                '''
+            } catch(error) {
+                currentBuild.result = 'FAILURE'
+                throw error
+            }
+        }
+
+        stage('Build Packages') {
+            try {
+                sh '''
+                    docker run --rm -v ${PWD}:/app -v /app/node_modules -p 3113:3000 global-analytics:latest
+                '''
+            } catch(error) {
+                currentBuild.result = 'FAILURE'
+                throw error
+            }
+        }
+
+        stage('Remove Docker Image') {
+            try {
+                sh '''
+                    docker rmi -f $(docker images 'global-analytics:latest' -a -q)
+                '''
+            } catch(error) {
+                currentBuild.result = 'FAILURE'
+                throw error
+            }
+        }
+
+        stage("Copy JS file to S3") {
+            withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'devops_globalsearch_web_cred', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                try {
+                    sh """
+                        export AWS_DEFAULT_REGION=us-east-1
+                        pwd
+                        ls ./dist/
+                        aws s3 sync ./dist/ s3://pp-static.monotype.com/global-analytics/ 
+                    """
+                } catch (error) {
+                    currentBuild.result = 'FAILURE'
+                    throw error
+                }
+            }
+        }
+        stage("PurgeCache") {
+            withCredentials([string(credentialsId: 'cfl-animesh-token', variable: 'SECRET')]) { 
+            try {
+                sh '''
+                set +x
+                echo "\n\n\n\n\n\n\n\n\n\n\n\n\n"
+                echo "URL to purge : https://pp-static.monotype.com/global-analytics/"
+                echo "CDN : Cloudflare"
+                echo "\n\n\n\n\n\n\n\n\n\n\n\n\n"
+                curl -s -X POST "https://api.cloudflare.com/client/v4/zones/e2f6f81b6049ac4453bca9f1d5a88fa1/purge_cache" -H "X-Auth-Email: animesh.srivastava@monotype.com" -H "X-Auth-Key: ${SECRET}" -H "Content-Type: application/json" --data '{"files":["https://pp-static.monotype.com/global-analytics/"]}'
+                sleep 3s
+                echo "The selected URL is purged, however might take a minute or 2 to reflect the changes"
+                set -x
+                 '''
+                } catch(error) {
+                currentBuild.result = 'FAILURE'
+                throw error
+            }
+    }
+        
+    }
+    }
+} catch (error) {
+    echo "Caught: ${error}"
+    currentBuild.result = "FAILURE"
+    throw error
+}
