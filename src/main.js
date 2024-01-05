@@ -842,7 +842,7 @@ function getResourceTileElement(event, parentEl) {
     if (isLinkorImgElement) {
         pushResourceClickEventData(parentEl, linkType);
     } else if (hasParentWithAnalyticsAttribute(event.target)) {
-        pushResourceClickEventData(event.target, 'button')
+        pushResourceClickEventData(event.target, event.target.dataset?.analyticsLinktype ?? 'button')
     }
 }
 
@@ -871,10 +871,12 @@ function pushResourceClickEventData(element, linkType) {
             linkName: element.dataset.analyticsLinkname,
             linkType: linkType
         },
-        content: {
-            resourceTopic: element.dataset.analyticsResourcetopic,
-            resourceTitle: element.dataset.analyticsResourcetitle
-        }
+        ...(element.dataset.analyticsResourcetopic && element.dataset.analyticsResourcetitle && {
+            content: {
+                resourceTopic: element.dataset.analyticsResourcetopic,
+                resourceTitle: element.dataset.analyticsResourcetitle
+            }
+        })
     });
 }
 
